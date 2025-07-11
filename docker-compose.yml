@@ -1,0 +1,81 @@
+services:
+  postgresql:
+    container_name: temporal-postgresql
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    networks:
+      - temporal-network
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  temporal:
+    container_name: temporal
+    image: temporalio/auto-setup:1.22.0
+    depends_on:
+      - postgresql
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    networks:
+      - temporal-network
+    ports:
+      - "7233:7233"
+
+  temporal-ui:
+    container_name: temporal-ui
+    image: temporalio/ui:2.21.3
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+    networks:
+      - temporal-network
+    ports:
+      - "8080:8080"
+  app:
+    build: .
+    ports:
+      - "9000:8000"  # FastAPI for webhooks
+    env_file:
+      - .env
+    volumes:
+      - ./obsidian_vault:/vault  # Mount local vault
+      - ./secrets:/secrets        # Mount folder for file-based secrets
+    depends_on:
+      - temporal
+      - postgresql
+    networks:
+      - temporal-network
+    command: python -m the_assistant.main
+
+  worker:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./obsidian_vault:/vault  # Mount local vault
+      - ./secrets:/secrets        # Mount folder for file-based secrets
+    depends_on:
+      - temporal
+      - postgresql
+    networks:
+      - temporal-network
+    command: python -m the_assistant.worker
+
+networks:
+  temporal-network:
+    driver: bridge
+
+volumes:
+  postgres-data: 

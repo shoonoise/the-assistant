@@ -1,0 +1,22 @@
+# Lefthook configuration for pre-commit hooks
+pre-commit:
+  parallel: true
+  commands:
+    # Run all formatting and linting fixes
+    format-and-lint:
+      glob: "*.py"
+      run: make fix
+      stage_fixed: true
+      
+    # Run type checking
+    typecheck:
+      glob: "*.py"
+      run: make typecheck
+
+# Pre-push hooks (comprehensive checks)
+pre-push:
+  parallel: false
+  commands:
+    # Run full CI checks
+    ci-check:
+      run: make ci 

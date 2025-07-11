@@ -1,0 +1,156 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation (exclude non-essential docs but keep README.md for package)
+docs/
+*.txt
+*.rst
+# Keep README.md as it's referenced in pyproject.toml
+# But exclude other markdown files that are project-specific
+poc_*.md
+generic_*.md
+raw_idea.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.emacs*
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing (exclude test results and coverage but keep test files)
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+# Keep tests/ directory for potential use in container
+# test_* files are usually test results, not source
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environment files (exclude actual env files but keep example)
+.env
+.env.local
+.env.production
+# Keep .env.example for documentation purposes
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Secrets and credentials
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+google.json
+service-account.json
+.telegram_token
+
+# Obsidian vault (usually not needed in container)
+obsidian_vault/
+
+# Temporal data
+temporal-data/
+temporal.db
+
+# uv cache
+.uv_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts that shouldn't be in Docker context
+*.whl
+*.tar.gz 
