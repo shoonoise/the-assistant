@@ -227,28 +227,6 @@ class TestFilterEngine:
         filtered = filter_engine.filter_by_properties(sample_notes, {})
         assert len(filtered) == len(sample_notes)
 
-    def test_get_upcoming_notes(self, filter_engine, sample_notes):
-        """Test getting upcoming notes."""
-        # Use a fixed reference date for testing
-        reference_date = date(2025, 2, 1)
-
-        # Get notes starting in the next 30 days from reference date
-        upcoming = filter_engine.get_upcoming_notes(sample_notes, 30, reference_date)
-
-        # Should only include Tokyo note (starts Feb 10)
-        assert len(upcoming) == 1
-        assert upcoming[0].title == "Business Trip to Tokyo"
-
-        # Test with 60 days ahead (should include Paris note too)
-        upcoming_60 = filter_engine.get_upcoming_notes(sample_notes, 60, reference_date)
-        assert len(upcoming_60) == 2
-        assert "Business Trip to Tokyo" in [note.title for note in upcoming_60]
-        assert "Trip to Paris" in [note.title for note in upcoming_60]
-
-        # Verify sorting by start_date
-        assert upcoming_60[0].title == "Business Trip to Tokyo"  # Feb 10
-        assert upcoming_60[1].title == "Trip to Paris"  # Mar 15
-
     def test_filter_by_pending_tasks(self, filter_engine, sample_notes):
         """Test filtering notes by pending task status."""
         # Filter for notes with pending tasks

@@ -177,39 +177,6 @@ class FilterEngine:
 
         return filtered_notes
 
-    def get_upcoming_notes(
-        self,
-        notes: list[ObsidianNote],
-        days_ahead: int = 30,
-        reference_date: date | None = None,
-    ) -> list[ObsidianNote]:
-        """
-        Get notes with start_date in the upcoming days.
-
-        Args:
-            notes: List of ObsidianNote objects to filter
-            days_ahead: Number of days to look ahead
-            reference_date: Reference date (defaults to today)
-
-        Returns:
-            List of notes with start_date in the upcoming period
-        """
-        if reference_date is None:
-            reference_date = date.today()
-
-        end_date = reference_date + timedelta(days=days_ahead)
-
-        upcoming_notes = []
-        for note in notes:
-            start_date = note.start_date
-
-            # Include notes that start in the upcoming period
-            if start_date and reference_date <= start_date <= end_date:
-                upcoming_notes.append(note)
-
-        # Sort by start_date
-        return sorted(upcoming_notes, key=lambda note: note.start_date or date.max)
-
     def filter_by_pending_tasks(
         self, notes: list[ObsidianNote], has_pending_tasks: bool = True
     ) -> list[ObsidianNote]:
