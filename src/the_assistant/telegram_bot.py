@@ -7,20 +7,11 @@ This module starts the Telegram bot in polling mode to handle user commands.
 
 import asyncio
 import logging
-import os
-
-import dotenv
 
 from the_assistant.integrations.telegram.telegram_client import create_telegram_client
 
-# Load environment variables
-dotenv.load_dotenv()
+from .settings import get_settings
 
-# Setup logging
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +40,11 @@ async def run_telegram_bot() -> None:
 
 def main():
     """Main entry point for the Telegram bot."""
+    settings = get_settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.info("Starting The Assistant Telegram Bot")
     asyncio.run(run_telegram_bot())
 

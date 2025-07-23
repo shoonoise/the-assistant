@@ -7,9 +7,7 @@ This module starts a basic Temporal worker that only registers activities.
 
 import asyncio
 import logging
-import os
 
-import dotenv
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
@@ -30,22 +28,21 @@ from the_assistant.activities.telegram_activities import (
 )
 from the_assistant.workflows.daily_briefing import DailyBriefing
 
-# Load environment variables
-dotenv.load_dotenv()
+from .settings import get_settings
 
-# Setup logging
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
 async def run_worker() -> None:
     """Start the simplified Temporal worker."""
     try:
+        settings = get_settings()
+        logging.basicConfig(
+            level=getattr(logging, settings.log_level),
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
         # Connect to Temporal with Pydantic V2 converter
-        temporal_host = os.getenv("TEMPORAL_HOST", "localhost:7233")
+        temporal_host = settings.temporal_host
         logger.info(f"Connecting to Temporal server at {temporal_host}")
         client = await Client.connect(
             temporal_host,
@@ -54,7 +51,7 @@ async def run_worker() -> None:
         logger.info("Connected to Temporal server")
 
         # Create worker with only activities (no workflows)
-        task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "the-assistant")
+        task_queue = settings.temporal_task_queue
         worker = Worker(
             client,
             task_queue=task_queue,

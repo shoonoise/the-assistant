@@ -6,7 +6,6 @@ Activities are atomic, idempotent operations that can be retried by Temporal.
 """
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -15,10 +14,7 @@ from temporalio import activity
 from the_assistant.integrations.google.client import GoogleClient
 from the_assistant.integrations.google.credential_store import PostgresCredentialStore
 from the_assistant.models.google import CalendarEvent
-from the_assistant.utils.config import (
-    get_google_calendar_id,
-    get_google_credentials_path,
-)
+from the_assistant.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +50,9 @@ class GetTodayEventsInput:
 
 def get_google_client(user_id: int) -> GoogleClient:
     """Get a configured Google client for the user."""
-    database_url = os.getenv(
-        "DATABASE_URL", "postgresql://temporal:temporal@postgresql:5432/the_assistant"
-    )
-    encryption_key = os.getenv("DB_ENCRYPTION_KEY")
+    settings = get_settings()
+    database_url = settings.database_url
+    encryption_key = settings.db_encryption_key
     if not encryption_key:
         raise ValueError("DB_ENCRYPTION_KEY not configured")
 
@@ -66,12 +61,8 @@ def get_google_client(user_id: int) -> GoogleClient:
     )
 
     credential_store = PostgresCredentialStore(database_url, encryption_key)
-    credentials_path = get_google_credentials_path()
-    scopes = (
-        os.getenv("GOOGLE_OAUTH_SCOPES", "").split(",")
-        if os.getenv("GOOGLE_OAUTH_SCOPES")
-        else None
-    )
+    credentials_path = settings.google_credentials_path
+    scopes = settings.google_oauth_scopes
 
     return GoogleClient(
         user_id=user_id,
@@ -165,9 +156,10 @@ async def get_events_by_date(input: GetEventsByDateInput) -> list[CalendarEvent]
     Raises:
         Exception: If authentication or calendar operation fails
     """
+    settings = get_settings()
     calendar_id = input.calendar_id
     if calendar_id is None:
-        calendar_id = get_google_calendar_id()
+        calendar_id = settings.google_calendar_id
 
     logger.info(
         f"Fetching events for date {input.target_date.date()} from calendar {calendar_id} for user {input.user_id}"
