@@ -28,6 +28,7 @@ from the_assistant.activities.obsidian_activities import (
 from the_assistant.activities.telegram_activities import (
     send_message,
 )
+from the_assistant.activities.weather_activities import get_weather_forecast
 from the_assistant.workflows.daily_briefing import DailyBriefing
 
 # Load environment variables
@@ -66,6 +67,8 @@ async def run_worker() -> None:
                 get_today_events,
                 # Obsidian activities
                 scan_vault_notes,
+                # Weather activities
+                get_weather_forecast,
                 # Messages activities
                 build_daily_briefing,
                 # Telegram activities

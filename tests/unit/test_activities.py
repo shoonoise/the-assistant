@@ -1,7 +1,7 @@
 """Tests for Temporal activities."""
 
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +18,12 @@ from the_assistant.activities.google_activities import (
     get_upcoming_events,
 )
 from the_assistant.activities.obsidian_activities import scan_vault_notes
+from the_assistant.activities.weather_activities import (
+    GetWeatherForecastInput,
+    get_weather_forecast,
+)
 from the_assistant.models.google import CalendarEvent
+from the_assistant.models.weather import WeatherForecast
 
 
 class TestGoogleActivities:
@@ -233,3 +238,27 @@ class TestObsidianActivities:
         assert result == expected_result
         mock_obsidian_client_class.assert_called_once_with("/path/to/vault", user_id=1)
         mock_obsidian_client.get_notes.assert_called_once_with(filters)
+
+class TestWeatherActivities:
+    """Test weather forecast activities."""
+
+    @pytest.mark.asyncio
+    @patch("the_assistant.activities.weather_activities.WeatherClient")
+    async def test_get_weather_forecast_success(self, mock_client_class):
+        mock_client = AsyncMock()
+        forecast = WeatherForecast(
+            location="Paris",
+            forecast_date=date(2024, 7, 10),
+            weather_code=1,
+            temperature_max=25,
+            temperature_min=15,
+        )
+        mock_client.get_forecast.return_value = [forecast]
+        mock_client_class.return_value = mock_client
+
+        input_data = GetWeatherForecastInput(location="Paris")
+        result = await get_weather_forecast(input_data)
+
+        assert result == [forecast]
+        mock_client.get_forecast.assert_called_once_with("Paris", days=1)
+
