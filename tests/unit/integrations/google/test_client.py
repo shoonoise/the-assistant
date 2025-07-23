@@ -13,6 +13,7 @@ from the_assistant.integrations.google.client import (
     GoogleAuthError,
     GoogleCalendarError,
     GoogleClient,
+    GoogleGmailError,
 )
 from the_assistant.models.google import CalendarEvent
 
@@ -306,6 +307,102 @@ class TestGoogleClient:
         call_args = mock_events.list.call_args[1]
         assert "timeMin" in call_args
         assert "timeMax" in call_args
+
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_emails_success(
+        self, mock_build, mock_credential_store, mock_credentials
+    ):
+        """Test successful Gmail messages retrieval."""
+        mock_service = MagicMock()
+        mock_users = MagicMock()
+        mock_messages = MagicMock()
+        mock_list = MagicMock()
+        mock_get = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.users.return_value = mock_users
+        mock_users.messages.return_value = mock_messages
+        mock_messages.list.return_value = mock_list
+        mock_list.execute.return_value = {"messages": [{"id": "m1"}]}
+        mock_messages.get.return_value = mock_get
+        mock_get.execute.return_value = {
+            "id": "m1",
+            "threadId": "t1",
+            "snippet": "hi",
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Test"},
+                    {"name": "From", "value": "sender@example.com"},
+                    {"name": "To", "value": "user@example.com"},
+                    {"name": "Date", "value": "2024-01-01T10:00:00Z"},
+                ]
+            },
+            "labelIds": ["UNREAD"],
+        }
+
+        mock_credential_store.get_credentials.return_value = mock_credentials
+
+        client = GoogleClient(
+            user_id=1,
+            credential_store=mock_credential_store,
+            credentials_path="/path/to/creds.json",
+        )
+
+        emails = await client.get_emails(unread_only=True, sender="sender@example.com")
+
+        assert len(emails) == 1
+        assert emails[0].subject == "Test"
+        call_args = mock_messages.list.call_args[1]
+        assert "q" in call_args
+        assert (
+            "is:unread" in call_args["q"]
+            and "from:sender@example.com" in call_args["q"]
+        )
+
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_emails_http_error(
+        self, mock_build, mock_credential_store, mock_credentials
+    ):
+        """Test Gmail retrieval with HTTP error."""
+        mock_service = MagicMock()
+        mock_users = MagicMock()
+        mock_messages = MagicMock()
+        mock_list = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.users.return_value = mock_users
+        mock_users.messages.return_value = mock_messages
+        mock_messages.list.return_value = mock_list
+        mock_list.execute.side_effect = HttpError(
+            resp=MagicMock(status=403), content=b"{}"
+        )
+
+        mock_credential_store.get_credentials.return_value = mock_credentials
+
+        client = GoogleClient(
+            user_id=1,
+            credential_store=mock_credential_store,
+            credentials_path="/path/to/creds.json",
+        )
+
+        with pytest.raises(GoogleGmailError, match="Gmail API error"):
+            await client.get_emails()
+
+    @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
+    async def test_get_emails_not_authenticated(
+        self, mock_get_credentials, mock_credential_store
+    ):
+        """Test Gmail retrieval when not authenticated."""
+        mock_get_credentials.return_value = None
+
+        client = GoogleClient(
+            user_id=1,
+            credential_store=mock_credential_store,
+            credentials_path="/path/to/creds.json",
+        )
+
+        with pytest.raises(GoogleAuthError, match="No valid credentials available"):
+            await client.get_emails()
 
     @patch("the_assistant.integrations.google.client.build")
     async def test_get_events_by_date(

@@ -16,7 +16,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-un
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
-from ...models.google import CalendarEvent
+from ...models.google import CalendarEvent, GmailMessage
 from .credential_store import CredentialStore
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,12 @@ class GoogleCalendarError(Exception):
     pass
 
 
+class GoogleGmailError(Exception):
+    """Google Gmail operation failed."""
+
+    pass
+
+
 class GoogleClient:
     """
     Google API client for headless containers with CredentialStore support.
@@ -45,6 +51,7 @@ class GoogleClient:
     DEFAULT_SCOPES = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
     ]
 
     def __init__(
@@ -69,6 +76,7 @@ class GoogleClient:
         self.scopes = scopes or self.DEFAULT_SCOPES
         self._credentials: Credentials | None = None
         self._calendar_service: Any = None
+        self._gmail_service: Any = None
         self._oauth_flow: InstalledAppFlow | None = None
 
     async def generate_auth_url(
@@ -218,6 +226,21 @@ class GoogleClient:
                 ) from e
 
         return self._calendar_service
+
+    def _get_gmail_service(self) -> Any:
+        """Get the Gmail API service instance."""
+        if self._gmail_service is None:
+            if not self._credentials:
+                raise GoogleAuthError("No valid credentials available")
+
+            try:
+                self._gmail_service = build(
+                    "gmail", "v1", credentials=self._credentials
+                )
+            except Exception as e:
+                raise GoogleGmailError(f"Failed to create gmail service: {e}") from e
+
+        return self._gmail_service
 
     async def get_calendar_events(
         self,
@@ -421,3 +444,95 @@ class GoogleClient:
             f"is_authenticated for user {self.user_id}: credentials={credentials is not None}, valid={credentials.valid if credentials else False}"
         )
         return credentials is not None and credentials.valid
+
+    async def get_emails(
+        self,
+        unread_only: bool | None = None,
+        sender: str | None = None,
+        after: datetime | None = None,
+        before: datetime | None = None,
+        max_results: int = 10,
+    ) -> list[GmailMessage]:
+        """Retrieve emails from the user's Gmail inbox."""
+
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+
+        query_parts: list[str] = []
+        if unread_only is True:
+            query_parts.append("is:unread")
+        elif unread_only is False:
+            query_parts.append("is:read")
+
+        if sender:
+            query_parts.append(f"from:{sender}")
+
+        if after:
+            query_parts.append(after.strftime("after:%Y/%m/%d"))
+        if before:
+            query_parts.append(before.strftime("before:%Y/%m/%d"))
+
+        query = " ".join(query_parts)
+
+        try:
+            service = self._get_gmail_service()
+            list_kwargs = {"userId": "me", "maxResults": max_results}
+            if query:
+                list_kwargs["q"] = query
+            messages_result = service.users().messages().list(**list_kwargs).execute()
+            message_items = messages_result.get("messages", [])
+
+            emails: list[GmailMessage] = []
+            for item in message_items:
+                msg = (
+                    service.users()
+                    .messages()
+                    .get(userId="me", id=item["id"], format="full")
+                    .execute()
+                )
+                try:
+                    emails.append(self._parse_gmail_message(msg))
+                except Exception as parse_err:  # pragma: no cover - safeguard
+                    logger.warning(
+                        f"Failed to parse gmail message {item.get('id')}: {parse_err}"
+                    )
+            return emails
+        except HttpError as e:
+            error_msg = f"Gmail API error: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve gmail messages: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+
+    def _parse_gmail_message(self, raw_message: dict[str, Any]) -> GmailMessage:
+        """Parse raw Gmail API message into GmailMessage model."""
+
+        headers = {
+            h["name"].lower(): h["value"]
+            for h in raw_message.get("payload", {}).get("headers", [])
+        }
+
+        subject = headers.get("subject", "")
+        sender = headers.get("from", "")
+        to = headers.get("to", "")
+        date_str = headers.get("date")
+        msg_date = None
+        if date_str:
+            try:
+                msg_date = self._parse_datetime_string(date_str)
+            except Exception:  # pragma: no cover - fallback
+                msg_date = None
+
+        return GmailMessage(
+            id=raw_message.get("id", ""),
+            thread_id=raw_message.get("threadId", ""),
+            snippet=raw_message.get("snippet", ""),
+            subject=subject,
+            sender=sender,
+            to=to,
+            date=msg_date,
+            raw_data=raw_message,
+        )

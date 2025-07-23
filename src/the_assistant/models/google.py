@@ -67,3 +67,34 @@ class CalendarEvent(BaseAssistantModel):
     def from_dict_list(cls, data_list: list[dict[str, Any]]) -> list["CalendarEvent"]:
         """Create list of CalendarEvent from raw dictionary list."""
         return [cls.from_dict(item) for item in data_list]
+
+
+class GmailMessage(BaseAssistantModel):
+    """Represents a message returned from Gmail."""
+
+    id: str = Field(description="Message ID")
+    thread_id: str = Field(description="Thread ID")
+    snippet: str = Field(description="Message snippet")
+    subject: str = Field(default="", description="Email subject")
+    sender: str = Field(default="", description="Sender email")
+    to: str = Field(default="", description="Recipient email")
+    date: datetime | None = Field(default=None, description="Message date")
+    raw_data: dict[str, Any] = Field(
+        default_factory=dict, description="Original API response data"
+    )
+
+    @computed_field
+    @property
+    def is_unread(self) -> bool:
+        """Check if the message is unread."""
+        return "UNREAD" in self.raw_data.get("labelIds", [])
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GmailMessage":
+        """Create GmailMessage from raw dictionary data."""
+        return cls.model_validate(data)
+
+    @classmethod
+    def from_dict_list(cls, data_list: list[dict[str, Any]]) -> list["GmailMessage"]:
+        """Create list of GmailMessage from raw dictionary list."""
+        return [cls.from_dict(item) for item in data_list]
