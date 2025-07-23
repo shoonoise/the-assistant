@@ -1,7 +1,5 @@
 """Database models for The Assistant."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from sqlalchemy import (
@@ -43,7 +41,7 @@ class User(Base):
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    settings: Mapped[list[UserSetting]] = relationship(
+    settings: Mapped[list["UserSetting"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
