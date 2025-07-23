@@ -186,6 +186,7 @@ class TestWorker:
         assert hasattr(worker_module, "get_calendar_events")
         assert hasattr(worker_module, "get_upcoming_events")
         assert hasattr(worker_module, "scan_vault_notes")
+        assert hasattr(worker_module, "get_weather_forecast")
         assert hasattr(worker_module, "send_message")
         assert hasattr(worker_module, "build_daily_briefing")
 
