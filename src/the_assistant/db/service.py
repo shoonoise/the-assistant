@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -30,6 +31,33 @@ class UserService:
         """Retrieve a user by primary key."""
         async with self._session_maker() as session:
             return await session.get(User, user_id)
+
+    async def get_user_by_telegram_chat_id(
+        self, telegram_chat_id: int
+    ) -> User | None:
+        """Retrieve a user by Telegram chat ID."""
+        async with self._session_maker() as session:
+            stmt = select(User).where(User.telegram_chat_id == telegram_chat_id)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def set_google_credentials(
+        self, user_id: int, credentials_enc: str | None
+    ) -> None:
+        """Store encrypted Google credentials for a user."""
+        async with self._session_maker() as session:
+            user = await session.get(User, user_id)
+            if user is None:
+                return
+            user.google_credentials_enc = credentials_enc
+            user.google_creds_updated_at = datetime.now(UTC) if credentials_enc else None
+            await session.commit()
+
+    async def get_google_credentials(self, user_id: int) -> str | None:
+        """Return encrypted Google credentials for a user."""
+        async with self._session_maker() as session:
+            user = await session.get(User, user_id)
+            return user.google_credentials_enc if user else None
 
     async def update_user(self, user_id: int, **data: Any) -> User | None:
         """Update a user's fields and return the updated record."""

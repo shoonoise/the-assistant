@@ -6,13 +6,11 @@ from fastapi.responses import RedirectResponse
 
 from .integrations.google.oauth_router import router as google_oauth_router
 from .settings import get_settings
-from .user_settings import router as settings_router
 
 app = FastAPI(title="The Assistant", version="0.1.0")
 
 # Include routers
 app.include_router(google_oauth_router)
-app.include_router(settings_router)
 
 
 # Redirect for Google OAuth callback (temporary fix)
