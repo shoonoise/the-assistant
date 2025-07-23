@@ -1,9 +1,10 @@
+import asyncio
 import logging
 from datetime import date
 
 import httpx
 
-from ...models.weather import WeatherForecast
+from the_assistant.models.weather import WeatherForecast
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +56,9 @@ class WeatherClient:
                 )
             )
         return forecasts
+
+
+if __name__ == "__main__":
+    client = WeatherClient()
+    forecast = asyncio.run(client.get_forecast("Paris", 1))
+    print(forecast)

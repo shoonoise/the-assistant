@@ -5,6 +5,7 @@ This implementation works with CredentialStore and supports web-based OAuth2 flo
 without requiring a browser in the container.
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,8 +17,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-un
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
-from ...models.google import CalendarEvent, GmailMessage
-from .credential_store import CredentialStore
+from the_assistant.integrations.google.credential_store import CredentialStore
+from the_assistant.models.google import CalendarEvent, GmailMessage
 
 logger = logging.getLogger(__name__)
 
@@ -536,3 +537,12 @@ class GoogleClient:
             date=msg_date,
             raw_data=raw_message,
         )
+
+
+if __name__ == "__main__":
+    client = GoogleClient(user_id=1, credential_store=CredentialStore())
+    emails = asyncio.run(client.get_emails())
+    print(emails)
+
+    events = asyncio.run(client.get_calendar_events())
+    print(events)
