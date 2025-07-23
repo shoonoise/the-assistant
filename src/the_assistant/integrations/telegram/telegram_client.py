@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class TelegramClient:
     """Client for interacting with the Telegram Bot API."""
 
-    def __init__(self, token: str, user_id: int):
+    def __init__(self, token: str, user_id: int | None = None):
         """Initialize the Telegram client.
 
         Args:
@@ -264,6 +264,7 @@ class TelegramClient:
         await self.application.initialize()
         await self.application.start()
         await self.application.updater.start_polling()
+        await asyncio.Event().wait()
 
     async def stop_polling(self) -> None:
         """Stop the bot polling.
@@ -438,7 +439,7 @@ async def handle_settings_command(
     logger.info(f"Sent settings to user {user_id}")
 
 
-async def create_telegram_client(user_id: int) -> TelegramClient:
+async def create_telegram_client() -> TelegramClient:
     """Create a TelegramClient instance using environment variables.
 
     Args:
@@ -452,7 +453,7 @@ async def create_telegram_client(user_id: int) -> TelegramClient:
     """
     token = get_telegram_token()
 
-    client = TelegramClient(token=token, user_id=user_id)
+    client = TelegramClient(token=token)
 
     # Validate the credentials
     is_valid = await client.validate_credentials()
