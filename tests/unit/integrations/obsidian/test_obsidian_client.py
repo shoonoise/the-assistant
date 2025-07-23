@@ -82,7 +82,6 @@ def mock_filter_engine():
         instance.filter_notes = MagicMock()
         instance.filter_by_tags = MagicMock()
         instance.filter_by_date_range = MagicMock()
-        instance.get_upcoming_notes = MagicMock()
         instance.search_by_content = MagicMock()
 
         yield instance
@@ -419,28 +418,6 @@ class TestObsidianClient:
 
         # Verify mock calls
         mock_filter_engine.filter_notes.assert_called_once_with([sample_note], filters)
-
-    async def test_get_upcoming_notes_using_filter_engine(
-        self, client, mock_filter_engine, sample_note
-    ):
-        """Test getting upcoming notes using FilterEngine directly."""
-        # Configure mocks
-        client.get_notes = AsyncMock(return_value=[sample_note])
-        mock_filter_engine.get_upcoming_notes.return_value = [sample_note]
-
-        # Call the filter engine method directly (since we removed the wrapper)
-        all_notes = await client.get_notes()
-        result = client.filter_engine.get_upcoming_notes(all_notes, days_ahead=30)
-
-        # Verify results
-        assert len(result) == 1
-        assert result[0].title == "Test Note"
-
-        # Verify mock calls
-        client.get_notes.assert_called_once()
-        mock_filter_engine.get_upcoming_notes.assert_called_once_with(
-            all_notes, days_ahead=30
-        )
 
     async def test_get_pending_tasks(self, client, sample_note):
         """Test getting pending tasks."""
