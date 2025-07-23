@@ -63,21 +63,27 @@ class TestGoogleActivities:
 
     def test_get_google_client_missing_encryption_key(self):
         """Test get_google_client raises error when encryption key is missing."""
+        from pydantic_core import ValidationError
+
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="DB_ENCRYPTION_KEY not configured"):
+            with pytest.raises(ValidationError):
                 get_google_client(1)
 
     @patch("the_assistant.activities.google_activities.GoogleClient")
     @patch("the_assistant.activities.google_activities.PostgresCredentialStore")
-    @patch("the_assistant.activities.google_activities.get_google_credentials_path")
+    @patch("the_assistant.activities.google_activities.get_settings")
     def test_get_google_client_success(
-        self, mock_get_creds_path, mock_credential_store, mock_google_client
+        self, mock_get_settings, mock_credential_store, mock_google_client
     ):
         """Test successful Google client creation."""
-        mock_get_creds_path.return_value = "/path/to/creds.json"
+        settings = AsyncMock()
+        settings.database_url = "db"
+        settings.db_encryption_key = "test-key"
+        settings.google_credentials_path = "/path/to/creds.json"
+        settings.google_oauth_scopes = ["scope"]
+        mock_get_settings.return_value = settings
 
-        with patch.dict(os.environ, {"DB_ENCRYPTION_KEY": "test-key"}):
-            client = get_google_client(1)
+        client = get_google_client(1)
 
         mock_credential_store.assert_called_once()
         mock_google_client.assert_called_once()
@@ -145,14 +151,16 @@ class TestGoogleActivities:
         with pytest.raises(ValueError, match="User 1 is not authenticated with Google"):
             await get_upcoming_events(input_data)
 
-    @patch("the_assistant.activities.google_activities.get_google_calendar_id")
+    @patch("the_assistant.activities.google_activities.get_settings")
     @patch("the_assistant.activities.google_activities.get_google_client")
     async def test_get_events_by_date_success(
-        self, mock_get_client, mock_get_calendar_id, mock_google_client, sample_events
+        self, mock_get_client, mock_get_settings, mock_google_client, sample_events
     ):
         """Test successful events by date retrieval."""
+        settings = AsyncMock()
+        settings.google_calendar_id = "test-calendar"
+        mock_get_settings.return_value = settings
         mock_get_client.return_value = mock_google_client
-        mock_get_calendar_id.return_value = "test-calendar"
         mock_google_client.get_events_by_date.return_value = sample_events
 
         target_date = datetime.now(UTC)
@@ -195,15 +203,17 @@ class TestObsidianActivities:
         client.get_notes.return_value = []  # NoteList is just list[ObsidianNote]
         return client
 
-    @patch("the_assistant.activities.obsidian_activities.get_obsidian_vault_path")
+    @patch("the_assistant.activities.obsidian_activities.get_settings")
     @patch("the_assistant.activities.obsidian_activities.ObsidianClient")
     async def test_scan_vault_notes_success(
-        self, mock_obsidian_client_class, mock_get_vault_path, mock_obsidian_client
+        self, mock_obsidian_client_class, mock_get_settings, mock_obsidian_client
     ):
         """Test successful vault scanning."""
         from the_assistant.activities.obsidian_activities import ScanVaultNotesInput
 
-        mock_get_vault_path.return_value = "/path/to/vault"
+        settings = AsyncMock()
+        settings.obsidian_vault_path = "/path/to/vault"
+        mock_get_settings.return_value = settings
         mock_obsidian_client_class.return_value = mock_obsidian_client
 
         expected_result = []  # NoteList is just list[ObsidianNote]
@@ -216,16 +226,18 @@ class TestObsidianActivities:
         mock_obsidian_client_class.assert_called_once_with("/path/to/vault", user_id=1)
         mock_obsidian_client.get_notes.assert_called_once_with(None)
 
-    @patch("the_assistant.activities.obsidian_activities.get_obsidian_vault_path")
+    @patch("the_assistant.activities.obsidian_activities.get_settings")
     @patch("the_assistant.activities.obsidian_activities.ObsidianClient")
     async def test_scan_vault_notes_with_filters(
-        self, mock_obsidian_client_class, mock_get_vault_path, mock_obsidian_client
+        self, mock_obsidian_client_class, mock_get_settings, mock_obsidian_client
     ):
         """Test vault scanning with filters."""
         from the_assistant.activities.obsidian_activities import ScanVaultNotesInput
         from the_assistant.models import NoteFilters
 
-        mock_get_vault_path.return_value = "/path/to/vault"
+        settings = AsyncMock()
+        settings.obsidian_vault_path = "/path/to/vault"
+        mock_get_settings.return_value = settings
         mock_obsidian_client_class.return_value = mock_obsidian_client
 
         filters = NoteFilters(tags=["test"], tag_operator="AND")

@@ -23,7 +23,7 @@ from telegram.ext import (
     filters,
 )
 
-from the_assistant.utils.config import get_telegram_token
+from the_assistant.settings import get_settings
 from the_assistant.utils.user_registry import get_user_registry
 
 logger = logging.getLogger(__name__)
@@ -32,16 +32,16 @@ logger = logging.getLogger(__name__)
 class TelegramClient:
     """Client for interacting with the Telegram Bot API."""
 
-    def __init__(self, token: str, user_id: int | None = None):
+    def __init__(self, user_id: int | None = None):
         """Initialize the Telegram client.
 
         Args:
-            token: The Telegram bot token obtained from BotFather.
             user_id: The user ID for user-specific operations.
 
         Raises:
-            ValueError: If the token is empty or None.
+            ValueError: If the bot token is not configured.
         """
+        token = get_settings().telegram_token
         if not token:
             raise ValueError("Telegram bot token cannot be empty")
 
@@ -451,9 +451,7 @@ async def create_telegram_client() -> TelegramClient:
     Raises:
         ValueError: If the required environment variables are not set.
     """
-    token = get_telegram_token()
-
-    client = TelegramClient(token=token)
+    client = TelegramClient()
 
     # Validate the credentials
     is_valid = await client.validate_credentials()

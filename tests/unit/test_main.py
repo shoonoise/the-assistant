@@ -14,7 +14,16 @@ class TestMainApp:
     @pytest.fixture
     def client(self):
         """Test client for the FastAPI app."""
-        return TestClient(app)
+        with patch.dict(
+            "os.environ",
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=False,
+        ):
+            yield TestClient(app)
 
     def test_app_creation(self):
         """Test that the app is created successfully."""
@@ -101,18 +110,6 @@ class TestMainApp:
         """Test that the user settings router is included."""
         routes = [route.path for route in app.routes]
         assert any(route.startswith("/settings") for route in routes)
-
-    @patch("the_assistant.main.dotenv.load_dotenv")
-    def test_dotenv_loaded(self, mock_load_dotenv):
-        """Test that dotenv is loaded on import."""
-        # Re-import to trigger the dotenv loading
-        import importlib
-
-        import the_assistant.main
-
-        importlib.reload(the_assistant.main)
-
-        mock_load_dotenv.assert_called()
 
     def test_app_has_correct_metadata(self):
         """Test that the app has correct metadata."""

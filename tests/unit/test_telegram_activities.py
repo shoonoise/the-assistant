@@ -23,13 +23,11 @@ class TestTelegramActivities:
         client.validate_credentials.return_value = True
         return client
 
-    @patch("the_assistant.activities.telegram_activities.get_telegram_token")
     @patch("the_assistant.activities.telegram_activities.TelegramClient")
     async def test_send_message_success(
-        self, mock_telegram_client_class, mock_get_token, mock_telegram_client
+        self, mock_telegram_client_class, mock_telegram_client
     ):
         """Test successful message sending."""
-        mock_get_token.return_value = "test_token"
         mock_telegram_client_class.return_value = mock_telegram_client
 
         input_data = SendMessageInput(
@@ -39,18 +37,16 @@ class TestTelegramActivities:
         result = await send_message(input_data)
 
         assert result is True
-        mock_telegram_client_class.assert_called_once_with("test_token", user_id=1)
+        mock_telegram_client_class.assert_called_once_with(user_id=1)
         mock_telegram_client.send_message.assert_called_once_with(
             chat_id=123456789, text="Test message", parse_mode="Markdown"
         )
 
-    @patch("the_assistant.activities.telegram_activities.get_telegram_token")
     @patch("the_assistant.activities.telegram_activities.TelegramClient")
     async def test_send_message_default_parse_mode(
-        self, mock_telegram_client_class, mock_get_token, mock_telegram_client
+        self, mock_telegram_client_class, mock_telegram_client
     ):
         """Test message sending with default parse mode."""
-        mock_get_token.return_value = "test_token"
         mock_telegram_client_class.return_value = mock_telegram_client
 
         input_data = SendMessageInput(user_id=1, chat_id=123456789, text="Test message")

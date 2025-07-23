@@ -1,5 +1,6 @@
 """Unit tests for the Telegram client."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -28,10 +29,17 @@ def mock_bot():
 @pytest.fixture
 def telegram_client(mock_bot):
     """Create a TelegramClient with a mock bot."""
-    with patch(
-        "the_assistant.integrations.telegram.telegram_client.Bot", return_value=mock_bot
+    with (
+        patch(
+            "the_assistant.integrations.telegram.telegram_client.Bot",
+            return_value=mock_bot,
+        ),
+        patch(
+            "the_assistant.integrations.telegram.telegram_client.get_settings",
+            return_value=SimpleNamespace(telegram_token="test_token"),
+        ),
     ):
-        client = TelegramClient(token="test_token", user_id=1)
+        client = TelegramClient(user_id=1)
         client.bot = mock_bot
         return client
 
@@ -69,13 +77,19 @@ class TestTelegramClient:
 
     def test_init(self):
         """Test initialization of the TelegramClient."""
-        # Test with valid token
-        client = TelegramClient(token="test_token", user_id=1)
-        assert client.token == "test_token"
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_settings",
+            return_value=SimpleNamespace(telegram_token="test_token"),
+        ):
+            client = TelegramClient(user_id=1)
+            assert client.token == "test_token"
 
-        # Test with empty token
-        with pytest.raises(ValueError):
-            TelegramClient(token="", user_id=1)
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_settings",
+            return_value=SimpleNamespace(telegram_token=""),
+        ):
+            with pytest.raises(ValueError):
+                TelegramClient(user_id=1)
 
     @pytest.mark.asyncio
     async def test_validate_credentials_success(self, telegram_client):

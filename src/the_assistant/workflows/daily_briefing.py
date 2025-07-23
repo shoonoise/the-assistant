@@ -20,7 +20,6 @@ with workflow.unsafe.imports_passed_through():
         send_message,
     )
     from the_assistant.models.obsidian import NoteFilters
-    from the_assistant.utils.config import get_morning_briefing_chat_id
 
 
 @workflow.defn
@@ -45,9 +44,7 @@ class DailyBriefing:
             start_to_close_timeout=timedelta(seconds=10),
         )
 
-        chat_id = get_morning_briefing_chat_id()
-        if chat_id is None:
-            raise ValueError("Morning briefing chat ID not configured")
+        chat_id = user_id  # TODO: should fetch chat ID per user
 
         await workflow.execute_activity(
             send_message,

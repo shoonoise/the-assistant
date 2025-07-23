@@ -1,20 +1,17 @@
-import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..settings import get_settings
 from .store import UserSettingsStore
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 def get_store() -> UserSettingsStore:
-    database_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://temporal:temporal@postgresql:5432/the_assistant",
-    )
-    return UserSettingsStore(database_url)
+    settings = get_settings()
+    return UserSettingsStore(settings.database_url)
 
 
 class SettingValue(BaseModel):

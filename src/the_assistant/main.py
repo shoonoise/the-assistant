@@ -1,16 +1,14 @@
 import logging
-import os
 
-import dotenv
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from .integrations.google.oauth_router import router as google_oauth_router
+from .settings import get_settings
 from .user_settings import router as settings_router
 
 app = FastAPI(title="The Assistant", version="0.1.0")
-dotenv.load_dotenv()
 
 # Include routers
 app.include_router(google_oauth_router)
@@ -218,20 +216,18 @@ async def test_gmail(
         logger.error(f"Error in test_gmail for user {user_id}: {e}")
         return {"error": str(e), "authenticated": False}
 
-
-# Setup logging
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
 def main():
     """Main entry point for the web server."""
+    settings = get_settings()
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.info("Starting The Assistant Web Server")
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=settings.port)
 
 
 if __name__ == "__main__":

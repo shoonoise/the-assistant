@@ -15,7 +15,7 @@ from the_assistant.models import (
     NoteFilters,
 )
 from the_assistant.models.obsidian import NoteList
-from the_assistant.utils.config import get_obsidian_vault_path
+from the_assistant.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ async def scan_vault_notes(input: ScanVaultNotesInput) -> NoteList:
     Raises:
         Exception: If vault operation fails
     """
-    vault_path = str(get_obsidian_vault_path())
+    vault_path = str(get_settings().obsidian_vault_path)
 
     logger.info(f"Scanning vault at {vault_path} for user_id={input.user_id}")
 

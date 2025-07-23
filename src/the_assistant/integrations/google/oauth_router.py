@@ -3,13 +3,13 @@ FastAPI router for Google OAuth2 endpoints.
 """
 
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
+from ...settings import Settings, get_settings
 from .client import GoogleAuthError, GoogleClient
 from .credential_store import PostgresCredentialStore
 
@@ -17,35 +17,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/google", tags=["google"])
 
-# JWT secret for state token signing
-JWT_SECRET = os.getenv("JWT_SECRET")
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET environment variable not set")
 
-
-def get_credential_store() -> PostgresCredentialStore:
+def get_credential_store(
+    settings: Settings = Depends(get_settings),
+) -> PostgresCredentialStore:
     """Dependency to get credential store."""
-    database_url = os.getenv(
-        "DATABASE_URL", "postgresql://temporal:temporal@postgresql:5432/the_assistant"
-    )
-    encryption_key = os.getenv("DB_ENCRYPTION_KEY")
-    if not encryption_key:
-        raise HTTPException(status_code=500, detail="DB_ENCRYPTION_KEY not configured")
-
-    return PostgresCredentialStore(database_url, encryption_key)
+    return PostgresCredentialStore(settings.database_url, settings.db_encryption_key)
 
 
 def get_google_client(
     user_id: int = Query(..., description="User ID"),
     credential_store: PostgresCredentialStore = Depends(get_credential_store),
+    settings: Settings = Depends(get_settings),
 ) -> GoogleClient:
     """Dependency to get Google client for a user."""
-    credentials_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "secrets/google.json")
-    scopes = (
-        os.getenv("GOOGLE_OAUTH_SCOPES", "").split(",")
-        if os.getenv("GOOGLE_OAUTH_SCOPES")
-        else None
-    )
+    credentials_path = settings.google_credentials_path
+    scopes = settings.google_oauth_scopes
 
     return GoogleClient(
         user_id=user_id,
@@ -55,20 +42,20 @@ def get_google_client(
     )
 
 
-def create_state_jwt(user_id: int) -> str:
+def create_state_jwt(user_id: int, settings: Settings) -> str:
     """Create a JWT state token for OAuth2 flow."""
     payload = {
         "user_id": user_id,
         "exp": datetime.now(UTC) + timedelta(minutes=10),  # 10 min expiry
         "iat": datetime.now(UTC),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
-def parse_state_jwt(state: str) -> int | None:
+def parse_state_jwt(state: str, settings: Settings) -> int | None:
     """Parse and validate JWT state token."""
     try:
-        payload = jwt.decode(state, JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(state, settings.jwt_secret, algorithms=["HS256"])
         return payload.get("user_id")
     except jwt.ExpiredSignatureError:
         logger.warning("State token expired")
@@ -82,6 +69,7 @@ def parse_state_jwt(state: str) -> int | None:
 async def begin_google_auth(
     user_id: int = Query(..., description="User ID"),
     client: GoogleClient = Depends(get_google_client),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Start Google OAuth2 flow.
@@ -94,10 +82,8 @@ async def begin_google_auth(
             return {"message": "User already authenticated", "authenticated": True}
 
         # Generate authorization URL with state
-        redirect_uri = os.getenv(
-            "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/google/oauth2callback"
-        )
-        state = create_state_jwt(user_id)
+        redirect_uri = settings.google_oauth_redirect_uri
+        state = create_state_jwt(user_id, settings)
         auth_url = await client.generate_auth_url(redirect_uri, state)
 
         return {
@@ -119,6 +105,7 @@ async def google_oauth_callback(
     code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State token"),
     error: str | None = Query(None, description="OAuth error from Google"),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Handle Google OAuth2 callback.
@@ -134,7 +121,7 @@ async def google_oauth_callback(
             )
 
         # Parse state token
-        user_id = parse_state_jwt(state)
+        user_id = parse_state_jwt(state, settings)
         if not user_id:
             logger.error("Invalid or expired state token")
             return RedirectResponse(
@@ -142,19 +129,15 @@ async def google_oauth_callback(
             )
 
         # Get client for this user
-        credential_store = get_credential_store()
+        credential_store = get_credential_store(settings)
         client = GoogleClient(
             user_id=user_id,
             credential_store=credential_store,
-            credentials_path=os.getenv(
-                "GOOGLE_CREDENTIALS_PATH", "/secrets/google.json"
-            ),
+            credentials_path=settings.google_credentials_path,
         )
 
         # Exchange code for credentials
-        redirect_uri = os.getenv(
-            "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/oauth2callback"
-        )
+        redirect_uri = settings.google_oauth_redirect_uri
         await client.exchange_code(code, redirect_uri)
 
         logger.info(f"Successfully authenticated user {user_id}")

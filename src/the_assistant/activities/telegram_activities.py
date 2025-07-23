@@ -11,9 +11,6 @@ from dataclasses import dataclass
 from temporalio import activity
 
 from the_assistant.integrations.telegram.telegram_client import TelegramClient
-from the_assistant.utils.config import (
-    get_telegram_token,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +51,7 @@ async def send_message(
     """
     logger.info(f"Sending message to chat {input.chat_id} for user {input.user_id}")
 
-    token = get_telegram_token()
-    client = TelegramClient(token, user_id=input.user_id)
+    client = TelegramClient(user_id=input.user_id)
 
     return await client.send_message(
         chat_id=input.chat_id,

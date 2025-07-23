@@ -30,26 +30,29 @@ class TestWorker:
         worker.run = AsyncMock()
         return worker
 
-    @patch("the_assistant.worker.dotenv.load_dotenv")
     @patch("the_assistant.worker.Client.connect")
     @patch("the_assistant.worker.Worker")
     async def test_run_worker_success(
         self,
         mock_worker_class,
         mock_client_connect,
-        mock_load_dotenv,
         mock_temporal_client,
         mock_worker,
     ):
         """Test successful worker startup."""
-        mock_load_dotenv.return_value = None
         mock_client_connect.return_value = mock_temporal_client
         mock_worker_class.return_value = mock_worker
 
         # Mock environment variables
         with patch.dict(
             os.environ,
-            {"TEMPORAL_HOST": "test-host:7233", "TEMPORAL_TASK_QUEUE": "test-queue"},
+            {
+                "TEMPORAL_HOST": "test-host:7233",
+                "TEMPORAL_TASK_QUEUE": "test-queue",
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
         ):
             # Run worker for a short time then stop
             async def stop_worker():
@@ -83,24 +86,29 @@ class TestWorker:
         workflows = worker_args[1]["workflows"]
         assert len(workflows) > 0
 
-    @patch("the_assistant.worker.dotenv.load_dotenv")
     @patch("the_assistant.worker.Client.connect")
     @patch("the_assistant.worker.Worker")
     async def test_run_worker_default_config(
         self,
         mock_worker_class,
         mock_client_connect,
-        mock_load_dotenv,
         mock_temporal_client,
         mock_worker,
     ):
         """Test worker startup with default configuration."""
-        mock_load_dotenv.return_value = None
         mock_client_connect.return_value = mock_temporal_client
         mock_worker_class.return_value = mock_worker
 
         # Clear environment variables to test defaults
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=False,
+        ):
             # Run worker for a short time then stop
             async def stop_worker():
                 await asyncio.sleep(0.1)
@@ -123,59 +131,76 @@ class TestWorker:
         worker_args = mock_worker_class.call_args
         assert worker_args[1]["task_queue"] == "the-assistant"
 
-    @patch("the_assistant.worker.dotenv.load_dotenv")
     @patch("the_assistant.worker.Client.connect")
-    async def test_run_worker_connection_error(
-        self, mock_client_connect, mock_load_dotenv
-    ):
+    async def test_run_worker_connection_error(self, mock_client_connect):
         """Test worker startup with connection error."""
-        mock_load_dotenv.return_value = None
         mock_client_connect.side_effect = Exception("Connection failed")
 
-        with pytest.raises(Exception, match="Connection failed"):
-            await run_worker()
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=True,
+        ):
+            with pytest.raises(Exception, match="Connection failed"):
+                await run_worker()
 
-    @patch("the_assistant.worker.dotenv.load_dotenv")
     @patch("the_assistant.worker.Client.connect")
     @patch("the_assistant.worker.Worker")
     async def test_run_worker_keyboard_interrupt(
         self,
         mock_worker_class,
         mock_client_connect,
-        mock_load_dotenv,
         mock_temporal_client,
         mock_worker,
     ):
         """Test worker graceful shutdown on keyboard interrupt."""
-        mock_load_dotenv.return_value = None
         mock_client_connect.return_value = mock_temporal_client
         mock_worker_class.return_value = mock_worker
         mock_worker.run.side_effect = KeyboardInterrupt()
 
-        # Should not raise exception, just log and exit gracefully
-        await run_worker()
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=True,
+        ):
+            # Should not raise exception, just log and exit gracefully
+            await run_worker()
 
         mock_worker.run.assert_called_once()
 
-    @patch("the_assistant.worker.dotenv.load_dotenv")
     @patch("the_assistant.worker.Client.connect")
     @patch("the_assistant.worker.Worker")
     async def test_run_worker_runtime_error(
         self,
         mock_worker_class,
         mock_client_connect,
-        mock_load_dotenv,
         mock_temporal_client,
         mock_worker,
     ):
         """Test worker handling of runtime errors."""
-        mock_load_dotenv.return_value = None
         mock_client_connect.return_value = mock_temporal_client
         mock_worker_class.return_value = mock_worker
         mock_worker.run.side_effect = RuntimeError("Worker failed")
 
-        with pytest.raises(RuntimeError, match="Worker failed"):
-            await run_worker()
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=True,
+        ):
+            with pytest.raises(RuntimeError, match="Worker failed"):
+                await run_worker()
 
     def test_worker_activities_imported(self):
         """Test that all required activities are imported."""
@@ -205,14 +230,31 @@ class TestWorker:
         mock_asyncio_run.assert_called_once()
 
     @patch("the_assistant.worker.logging.basicConfig")
-    def test_logging_configuration(self, mock_logging_config):
-        """Test that logging is configured correctly."""
-        # Re-import to trigger logging setup
-        import importlib
+    @patch("the_assistant.worker.Client.connect")
+    @patch("the_assistant.worker.Worker")
+    async def test_logging_configuration(
+        self,
+        mock_worker_class,
+        mock_client_connect,
+        mock_logging_config,
+        mock_temporal_client,
+        mock_worker,
+    ):
+        """Test that logging is configured during worker startup."""
+        mock_client_connect.return_value = mock_temporal_client
+        mock_worker_class.return_value = mock_worker
 
-        import the_assistant.worker
-
-        importlib.reload(the_assistant.worker)
+        mock_worker.run.side_effect = KeyboardInterrupt()
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=True,
+        ):
+            await run_worker()
 
         mock_logging_config.assert_called()
         call_args = mock_logging_config.call_args
@@ -221,28 +263,34 @@ class TestWorker:
 
     @patch.dict(os.environ, {"LOG_LEVEL": "DEBUG"})
     @patch("the_assistant.worker.logging.basicConfig")
-    def test_logging_level_from_env(self, mock_logging_config):
+    @patch("the_assistant.worker.Client.connect")
+    @patch("the_assistant.worker.Worker")
+    async def test_logging_level_from_env(
+        self,
+        mock_worker_class,
+        mock_client_connect,
+        mock_logging_config,
+        mock_temporal_client,
+        mock_worker,
+    ):
         """Test that logging level is read from environment."""
-        import importlib
+        mock_client_connect.return_value = mock_temporal_client
+        mock_worker_class.return_value = mock_worker
 
-        import the_assistant.worker
-
-        importlib.reload(the_assistant.worker)
+        mock_worker.run.side_effect = KeyboardInterrupt()
+        with patch.dict(
+            os.environ,
+            {
+                "DB_ENCRYPTION_KEY": "key",
+                "JWT_SECRET": "secret",
+                "GOOGLE_OAUTH_SCOPES": '["scope"]',
+            },
+            clear=False,
+        ):
+            await run_worker()
 
         mock_logging_config.assert_called()
         call_args = mock_logging_config.call_args
-        # The level should be DEBUG (which is 10)
         import logging
 
         assert call_args[1]["level"] == logging.DEBUG
-
-    def test_dotenv_loaded_on_import(self):
-        """Test that dotenv is loaded when module is imported."""
-        with patch("the_assistant.worker.dotenv.load_dotenv") as mock_load_dotenv:
-            import importlib
-
-            import the_assistant.worker
-
-            importlib.reload(the_assistant.worker)
-
-            mock_load_dotenv.assert_called_once()
