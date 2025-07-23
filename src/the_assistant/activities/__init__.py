@@ -14,6 +14,7 @@ from .telegram_activities import (
     send_formatted_message,
     send_message,
 )
+from .weather_activities import get_weather_forecast
 
 __all__ = [
     # Google activities
@@ -23,6 +24,8 @@ __all__ = [
     "get_upcoming_events",
     # Obsidian activities
     "scan_vault_notes",
+    # Weather activities
+    "get_weather_forecast",
     # Telegram activities
     "build_daily_briefing",
     "send_formatted_message",

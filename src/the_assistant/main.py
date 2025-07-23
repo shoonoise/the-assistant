@@ -132,6 +132,90 @@ async def test_calendar(user_id: int = 1):
         return {"error": str(e), "authenticated": False}
 
 
+@app.get("/test-gmail")
+async def test_gmail(
+    user_id: int = 1,
+    unread_only: bool | None = None,
+    sender: str | None = None,
+    max_results: int = 5,
+):
+    """Test endpoint to verify Gmail access works."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    from .activities.google_activities import get_google_client
+
+    try:
+        logger.info(f"Starting test_gmail for user {user_id}")
+        client = get_google_client(user_id)
+        logger.info(f"Created client for user {user_id}")
+
+        logger.info(f"Getting credentials for user {user_id}")
+        credentials = await client.get_credentials()
+        logger.info(f"Got credentials for user {user_id}: {credentials is not None}")
+
+        if not credentials:
+            logger.warning(f"No credentials found for user {user_id}")
+            return {
+                "error": f"No credentials found for user {user_id}",
+                "authenticated": False,
+                "debug": "No credentials in database",
+            }
+
+        logger.info(f"Checking authentication for user {user_id}")
+        is_authenticated = await client.is_authenticated()
+        logger.info(f"Authentication result for user {user_id}: {is_authenticated}")
+
+        debug_info = {
+            "has_credentials": credentials is not None,
+            "credentials_valid": credentials.valid if credentials else False,
+            "credentials_expired": credentials.expired if credentials else None,
+            "has_refresh_token": bool(credentials.refresh_token)
+            if credentials
+            else False,
+        }
+
+        if not is_authenticated:
+            logger.warning(f"User {user_id} is not authenticated")
+            return {
+                "error": f"User {user_id} is not authenticated with Google",
+                "authenticated": False,
+                "debug": debug_info,
+            }
+
+        logger.info(
+            f"Fetching emails for user {user_id} (unread_only={unread_only}, sender={sender})"
+        )
+        emails = await client.get_emails(
+            unread_only=unread_only,
+            sender=sender,
+            max_results=max_results,
+        )
+        logger.info(f"Got {len(emails)} emails for user {user_id}")
+
+        return {
+            "authenticated": True,
+            "user_id": user_id,
+            "emails_count": len(emails),
+            "debug": debug_info,
+            "emails": [
+                {
+                    "id": email.id,
+                    "snippet": email.snippet,
+                    "subject": email.subject,
+                    "sender": email.sender,
+                    "date": email.date.isoformat() if email.date else None,
+                    "unread": email.is_unread,
+                }
+                for email in emails[:5]
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Error in test_gmail for user {user_id}: {e}")
+        return {"error": str(e), "authenticated": False}
+
 logger = logging.getLogger(__name__)
 
 

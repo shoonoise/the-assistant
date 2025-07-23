@@ -15,6 +15,7 @@ from .activity_models import (
 )
 from .google import CalendarEvent
 from .obsidian import NoteFilters
+from .weather import WeatherForecast
 
 __all__ = [
     # Input models
@@ -25,4 +26,5 @@ __all__ = [
     "NoteSummary",
     "NoteWithPendingTasks",
     "TripNote",
+    "WeatherForecast",
 ]
