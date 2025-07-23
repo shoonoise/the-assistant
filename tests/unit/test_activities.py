@@ -239,6 +239,7 @@ class TestObsidianActivities:
         mock_obsidian_client_class.assert_called_once_with("/path/to/vault", user_id=1)
         mock_obsidian_client.get_notes.assert_called_once_with(filters)
 
+
 class TestWeatherActivities:
     """Test weather forecast activities."""
 
@@ -261,4 +262,3 @@ class TestWeatherActivities:
 
         assert result == [forecast]
         mock_client.get_forecast.assert_called_once_with("Paris", days=1)
-

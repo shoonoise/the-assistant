@@ -17,7 +17,9 @@ class WeatherClient:
     async def _get_coordinates(self, location: str) -> tuple[float, float]:
         """Resolve a location name to latitude and longitude."""
         async with httpx.AsyncClient() as client:
-            resp = await client.get(self.GEO_URL, params={"name": location, "count": 1, "format": "json"})
+            resp = await client.get(
+                self.GEO_URL, params={"name": location, "count": 1, "format": "json"}
+            )
             resp.raise_for_status()
             data = resp.json()
         results = data.get("results")
