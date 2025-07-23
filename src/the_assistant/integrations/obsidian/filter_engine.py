@@ -5,7 +5,7 @@ This module provides functionality to filter Obsidian notes based on tags,
 date ranges, custom metadata properties, and task status.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
 from .models import NoteFilters, ObsidianNote
