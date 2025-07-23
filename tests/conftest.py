@@ -17,8 +17,21 @@ from the_assistant.integrations.obsidian import MarkdownParser, MetadataExtracto
 # Ensure JWT_SECRET is available for tests
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
+
+@pytest.fixture(scope="function", autouse=True)
+def mock_settings(monkeypatch):
+    """Mock application settings for each test function."""
+    mock_settings_obj = MagicMock()
+    mock_settings_obj.db_encryption_key = "test-key"
+    mock_settings_obj.jwt_secret = "test-secret"
+
+    monkeypatch.setattr(
+        "the_assistant.settings.get_settings", lambda: mock_settings_obj
+    )
+
+
 # Test markers for categorization and filtering
-pytest_plugins = []
+pytest_plugins = ["pytester"]
 
 
 def pytest_configure(config):
