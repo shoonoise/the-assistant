@@ -1,7 +1,8 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from the_assistant.db import Base, UserService
+from the_assistant.db.models import Base
+from the_assistant.db.service import UserService
 
 
 @pytest.fixture
