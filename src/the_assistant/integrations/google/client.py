@@ -8,7 +8,6 @@ without requiring a browser in the container.
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from google.auth.transport.requests import Request  # type: ignore[import-untyped]
@@ -17,8 +16,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-un
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
-from the_assistant.integrations.google.credential_store import CredentialStore
+from the_assistant.integrations.google.credential_store import (
+    PostgresCredentialStore,
+)
 from the_assistant.models.google import CalendarEvent, GmailMessage
+from the_assistant.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -49,32 +51,26 @@ class GoogleClient:
     and the container receives the authorization code via webhook.
     """
 
-    DEFAULT_SCOPES = [
-        "https://www.googleapis.com/auth/calendar.readonly",
-        "https://www.googleapis.com/auth/calendar.events.readonly",
-        "https://www.googleapis.com/auth/gmail.readonly",
-    ]
-
     def __init__(
         self,
         user_id: int,
-        credential_store: CredentialStore,
-        credentials_path: str | Path = "secrets/google.json",
-        scopes: list[str] | None = None,
     ):
         """
         Initialize the Google client.
 
         Args:
             user_id: Database user ID
-            credential_store: Store for OAuth2 credentials
-            credentials_path: Path to Google OAuth2 client secrets
-            scopes: List of required OAuth2 scopes
         """
         self.user_id = user_id
-        self.credential_store = credential_store
-        self.credentials_path = Path(credentials_path)
-        self.scopes = scopes or self.DEFAULT_SCOPES
+        self.settings = get_settings()
+
+        self.credential_store = PostgresCredentialStore(
+            database_url=self.settings.database_url,
+            encryption_key=self.settings.db_encryption_key,
+        )
+        self.credentials_path = self.settings.google_credentials_path
+        self.scopes = self.settings.google_oauth_scopes
+
         self._credentials: Credentials | None = None
         self._calendar_service: Any = None
         self._gmail_service: Any = None
@@ -211,11 +207,13 @@ class GoogleClient:
             logger.error(f"Failed to get credentials for user {self.user_id}: {e}")
             return None
 
-    def _get_calendar_service(self) -> Any:
+    async def _get_calendar_service(self) -> Any:
         """Get the Google Calendar API service instance."""
         if self._calendar_service is None:
             if not self._credentials:
-                raise GoogleAuthError("No valid credentials available")
+                self._credentials = await self.get_credentials()
+                if not self._credentials:
+                    raise GoogleAuthError("No valid credentials available")
 
             try:
                 self._calendar_service = build(
@@ -228,11 +226,13 @@ class GoogleClient:
 
         return self._calendar_service
 
-    def _get_gmail_service(self) -> Any:
+    async def _get_gmail_service(self) -> Any:
         """Get the Gmail API service instance."""
         if self._gmail_service is None:
             if not self._credentials:
-                raise GoogleAuthError("No valid credentials available")
+                self._credentials = await self.get_credentials()
+                if not self._credentials:
+                    raise GoogleAuthError("No valid credentials available")
 
             try:
                 self._gmail_service = build(
@@ -269,7 +269,7 @@ class GoogleClient:
         credentials = await self.get_credentials()
         if not credentials:
             raise GoogleAuthError("No valid credentials available")
-
+        self._credentials = credentials
         try:
             if time_min is None:
                 time_min = datetime.now(UTC)
@@ -287,7 +287,7 @@ class GoogleClient:
 
             logger.debug(f"Fetching events from calendar {calendar_id}")
 
-            service = self._get_calendar_service()
+            service = await self._get_calendar_service()
             events_result = service.events().list(**request_params).execute()
             raw_events = events_result.get("items", [])
 
@@ -459,7 +459,7 @@ class GoogleClient:
         credentials = await self.get_credentials()
         if not credentials:
             raise GoogleAuthError("No valid credentials available")
-
+        self._credentials = credentials
         query_parts: list[str] = []
         if unread_only is True:
             query_parts.append("is:unread")
@@ -477,7 +477,7 @@ class GoogleClient:
         query = " ".join(query_parts)
 
         try:
-            service = self._get_gmail_service()
+            service = await self._get_gmail_service()
             list_kwargs = {"userId": "me", "maxResults": max_results}
             if query:
                 list_kwargs["q"] = query
@@ -540,7 +540,7 @@ class GoogleClient:
 
 
 if __name__ == "__main__":
-    client = GoogleClient(user_id=1, credential_store=CredentialStore())
+    client = GoogleClient(user_id=1)
     emails = asyncio.run(client.get_emails())
     print(emails)
 

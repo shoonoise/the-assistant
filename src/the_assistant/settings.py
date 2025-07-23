@@ -1,7 +1,5 @@
 """Central application settings using Pydantic."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -28,8 +26,11 @@ class Settings(BaseSettings):
         "http://localhost:9000/google/oauth2callback", env="GOOGLE_OAUTH_REDIRECT_URI"
     )
     google_oauth_scopes: list[str] = Field(
-        default_factory=lambda: ["https://www.googleapis.com/auth/calendar"],
-        env="GOOGLE_OAUTH_SCOPES",
+        default_factory=lambda: [
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/calendar.events.readonly",
+        ]
     )
 
     # Obsidian
@@ -54,15 +55,6 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(..., env="JWT_SECRET")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    @field_validator("google_oauth_scopes", mode="before")
-    @classmethod
-    def split_scopes(cls, v: str | list[str] | None) -> list[str]:
-        if v is None:
-            return []
-        if isinstance(v, str):
-            return [s for s in v.split(",") if s]
-        return list(v)
 
     @field_validator(
         "google_credentials_path",

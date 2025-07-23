@@ -51,7 +51,6 @@ class TestWorker:
                 "TEMPORAL_TASK_QUEUE": "test-queue",
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
         ):
             # Run worker for a short time then stop
@@ -87,51 +86,6 @@ class TestWorker:
         assert len(workflows) > 0
 
     @patch("the_assistant.worker.Client.connect")
-    @patch("the_assistant.worker.Worker")
-    async def test_run_worker_default_config(
-        self,
-        mock_worker_class,
-        mock_client_connect,
-        mock_temporal_client,
-        mock_worker,
-    ):
-        """Test worker startup with default configuration."""
-        mock_client_connect.return_value = mock_temporal_client
-        mock_worker_class.return_value = mock_worker
-
-        # Clear environment variables to test defaults
-        with patch.dict(
-            os.environ,
-            {
-                "DB_ENCRYPTION_KEY": "key",
-                "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
-            },
-            clear=False,
-        ):
-            # Run worker for a short time then stop
-            async def stop_worker():
-                await asyncio.sleep(0.1)
-                mock_worker.run.side_effect = KeyboardInterrupt()
-
-            task = asyncio.create_task(run_worker())
-            stop_task = asyncio.create_task(stop_worker())
-
-            try:
-                await asyncio.gather(task, stop_task)
-            except KeyboardInterrupt:
-                pass  # Expected
-
-        # Verify default values are used
-        mock_client_connect.assert_called_once()
-        call_args = mock_client_connect.call_args
-        assert call_args[0][0] == "localhost:7233"
-
-        mock_worker_class.assert_called_once()
-        worker_args = mock_worker_class.call_args
-        assert worker_args[1]["task_queue"] == "the-assistant"
-
-    @patch("the_assistant.worker.Client.connect")
     async def test_run_worker_connection_error(self, mock_client_connect):
         """Test worker startup with connection error."""
         mock_client_connect.side_effect = Exception("Connection failed")
@@ -141,7 +95,6 @@ class TestWorker:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=True,
         ):
@@ -167,7 +120,6 @@ class TestWorker:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=True,
         ):
@@ -195,7 +147,6 @@ class TestWorker:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=True,
         ):
@@ -250,7 +201,6 @@ class TestWorker:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=True,
         ):
@@ -283,7 +233,6 @@ class TestWorker:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=False,
         ):

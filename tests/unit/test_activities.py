@@ -1,6 +1,5 @@
 """Tests for Temporal activities."""
 
-import os
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -61,31 +60,15 @@ class TestGoogleActivities:
             ),
         ]
 
-    def test_get_google_client_missing_encryption_key(self):
-        """Test get_google_client raises error when encryption key is missing."""
-        from pydantic_core import ValidationError
-
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValidationError):
-                get_google_client(1)
-
     @patch("the_assistant.activities.google_activities.GoogleClient")
-    @patch("the_assistant.activities.google_activities.PostgresCredentialStore")
     @patch("the_assistant.activities.google_activities.get_settings")
-    def test_get_google_client_success(
-        self, mock_get_settings, mock_credential_store, mock_google_client
-    ):
+    def test_get_google_client_success(self, mock_get_settings, mock_google_client):
         """Test successful Google client creation."""
         settings = AsyncMock()
-        settings.database_url = "db"
-        settings.db_encryption_key = "test-key"
-        settings.google_credentials_path = "/path/to/creds.json"
-        settings.google_oauth_scopes = ["scope"]
         mock_get_settings.return_value = settings
 
         client = get_google_client(1)
 
-        mock_credential_store.assert_called_once()
         mock_google_client.assert_called_once()
         assert client is not None
 

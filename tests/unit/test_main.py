@@ -19,7 +19,6 @@ class TestMainApp:
             {
                 "DB_ENCRYPTION_KEY": "key",
                 "JWT_SECRET": "secret",
-                "GOOGLE_OAUTH_SCOPES": '["scope"]',
             },
             clear=False,
         ):

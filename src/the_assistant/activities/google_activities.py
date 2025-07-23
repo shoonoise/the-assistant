@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from temporalio import activity
 
 from the_assistant.integrations.google.client import GoogleClient
-from the_assistant.integrations.google.credential_store import PostgresCredentialStore
 from the_assistant.models.google import CalendarEvent
 from the_assistant.settings import get_settings
 
@@ -50,26 +49,10 @@ class GetTodayEventsInput:
 
 def get_google_client(user_id: int) -> GoogleClient:
     """Get a configured Google client for the user."""
-    settings = get_settings()
-    database_url = settings.database_url
-    encryption_key = settings.db_encryption_key
-    if not encryption_key:
-        raise ValueError("DB_ENCRYPTION_KEY not configured")
 
-    logger.info(
-        f"Creating Google client for user {user_id} with database: {database_url}"
-    )
+    logger.info(f"Creating Google client for user {user_id}")
 
-    credential_store = PostgresCredentialStore(database_url, encryption_key)
-    credentials_path = settings.google_credentials_path
-    scopes = settings.google_oauth_scopes
-
-    return GoogleClient(
-        user_id=user_id,
-        credential_store=credential_store,
-        credentials_path=credentials_path,
-        scopes=scopes,
-    )
+    return GoogleClient(user_id=user_id)
 
 
 @activity.defn

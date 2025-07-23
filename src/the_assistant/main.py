@@ -216,6 +216,7 @@ async def test_gmail(
         logger.error(f"Error in test_gmail for user {user_id}: {e}")
         return {"error": str(e), "authenticated": False}
 
+
 logger = logging.getLogger(__name__)
 
 

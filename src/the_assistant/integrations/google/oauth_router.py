@@ -27,19 +27,9 @@ def get_credential_store(
 
 def get_google_client(
     user_id: int = Query(..., description="User ID"),
-    credential_store: PostgresCredentialStore = Depends(get_credential_store),
-    settings: Settings = Depends(get_settings),
 ) -> GoogleClient:
     """Dependency to get Google client for a user."""
-    credentials_path = settings.google_credentials_path
-    scopes = settings.google_oauth_scopes
-
-    return GoogleClient(
-        user_id=user_id,
-        credential_store=credential_store,
-        credentials_path=credentials_path,
-        scopes=scopes,
-    )
+    return GoogleClient(user_id=user_id)
 
 
 def create_state_jwt(user_id: int, settings: Settings) -> str:
@@ -129,12 +119,7 @@ async def google_oauth_callback(
             )
 
         # Get client for this user
-        credential_store = get_credential_store(settings)
-        client = GoogleClient(
-            user_id=user_id,
-            credential_store=credential_store,
-            credentials_path=settings.google_credentials_path,
-        )
+        client = GoogleClient(user_id=user_id)
 
         # Exchange code for credentials
         redirect_uri = settings.google_oauth_redirect_uri

@@ -23,16 +23,46 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
+@pytest.fixture
+def mock_settings(monkeypatch):
+    """Mock application settings."""
+    settings = MagicMock()
+    settings.database_url = "postgresql://test:test@localhost/test"
+    settings.db_encryption_key = "test_key"
+    settings.google_credentials_path = Path("/path/to/creds.json")
+    settings.google_oauth_scopes = [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+    ]
+
+    monkeypatch.setattr(
+        "the_assistant.integrations.google.client.get_settings", lambda: settings
+    )
+    return settings
+
+
+@pytest.fixture
+def mock_credential_store_class(monkeypatch):
+    """Mock PostgresCredentialStore class."""
+    mock_store_class = MagicMock()
+    mock_store_instance = AsyncMock()
+    mock_store_class.return_value = mock_store_instance
+    monkeypatch.setattr(
+        "the_assistant.integrations.google.client.PostgresCredentialStore",
+        mock_store_class,
+    )
+    return mock_store_class, mock_store_instance
+
+
+@pytest.mark.filterwarnings("ignore:coroutine.*was never awaited:RuntimeWarning")
 class TestGoogleClient:
     """Test Google Client."""
 
-    @pytest.fixture
-    def mock_credential_store(self):
-        """Mock credential store."""
-        store = AsyncMock()
-        store.get_credentials.return_value = None
-        store.save_credentials.return_value = None
-        return store
+    @pytest.fixture(autouse=True)
+    def setup(self, mock_settings, mock_credential_store_class):
+        """Auto-setup for all tests in this class."""
+        self.mock_settings = mock_settings
+        self.mock_store_class, self.mock_store_instance = mock_credential_store_class
 
     @pytest.fixture
     def mock_credentials(self):
@@ -52,6 +82,7 @@ class TestGoogleClient:
                 "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
             }
         )
+        creds.refresh.return_value = None
         return creds
 
     @pytest.fixture
@@ -67,81 +98,52 @@ class TestGoogleClient:
             }
         }
 
-    def test_init_default_scopes(self, mock_credential_store):
-        """Test initialization with default scopes."""
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+    def test_init(self):
+        """Test initialization of GoogleClient."""
+        client = GoogleClient(user_id=1)
 
         assert client.user_id == 1
-        assert client.credential_store == mock_credential_store
-        assert client.credentials_path == Path("/path/to/creds.json")
-        assert client.scopes == GoogleClient.DEFAULT_SCOPES
-
-    def test_init_custom_scopes(self, mock_credential_store):
-        """Test initialization with custom scopes."""
-        custom_scopes = ["https://www.googleapis.com/auth/calendar"]
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-            scopes=custom_scopes,
+        assert client.settings == self.mock_settings
+        self.mock_store_class.assert_called_once_with(
+            database_url=self.mock_settings.database_url,
+            encryption_key=self.mock_settings.db_encryption_key,
         )
-
-        assert client.scopes == custom_scopes
-
-    @patch("builtins.open", new_callable=mock_open)
-    # Note: _load_client_config is not a public method, removing these tests
-    # as they test internal implementation details
+        assert client.credential_store == self.mock_store_instance
+        assert client.credentials_path == self.mock_settings.google_credentials_path
+        assert client.scopes == self.mock_settings.google_oauth_scopes
 
     @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
-    async def test_is_authenticated_no_credentials(
-        self, mock_get_credentials, mock_credential_store
-    ):
+    async def test_is_authenticated_no_credentials(self, mock_get_credentials):
         """Test is_authenticated when no credentials exist."""
         mock_get_credentials.return_value = None
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+        client = GoogleClient(user_id=1)
 
         result = await client.is_authenticated()
         assert result is False
 
     @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
     async def test_is_authenticated_valid_credentials(
-        self, mock_get_credentials, mock_credential_store, mock_credentials
+        self, mock_get_credentials, mock_credentials
     ):
         """Test is_authenticated with valid credentials."""
         mock_get_credentials.return_value = mock_credentials
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+        client = GoogleClient(user_id=1)
 
         result = await client.is_authenticated()
         assert result is True
 
     @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
     async def test_is_authenticated_expired_credentials(
-        self, mock_get_credentials, mock_credential_store, mock_credentials
+        self, mock_get_credentials, mock_credentials
     ):
         """Test is_authenticated with expired credentials."""
         mock_credentials.valid = False
         mock_credentials.expired = True
         mock_get_credentials.return_value = mock_credentials
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+        client = GoogleClient(user_id=1)
 
         result = await client.is_authenticated()
         assert result is False
@@ -149,7 +151,7 @@ class TestGoogleClient:
     @patch("builtins.open", new_callable=mock_open)
     @patch("the_assistant.integrations.google.client.InstalledAppFlow")
     async def test_generate_auth_url_success(
-        self, mock_flow_class, mock_file, mock_credential_store, sample_credentials_json
+        self, mock_flow_class, mock_file, sample_credentials_json
     ):
         """Test successful authorization URL generation."""
         mock_file.return_value.read.return_value = json.dumps(sample_credentials_json)
@@ -157,11 +159,7 @@ class TestGoogleClient:
         mock_flow.authorization_url.return_value = ("https://auth.url", "state")
         mock_flow_class.from_client_secrets_file.return_value = mock_flow
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+        client = GoogleClient(user_id=1)
 
         auth_url = await client.generate_auth_url(
             "http://localhost:8080/callback", "test_state"
@@ -174,32 +172,75 @@ class TestGoogleClient:
             prompt="consent",
             state="test_state",
         )
+        mock_flow_class.from_client_secrets_file.assert_called_with(
+            str(self.mock_settings.google_credentials_path),
+            self.mock_settings.google_oauth_scopes,
+        )
 
-    async def test_exchange_code_success(self, mock_credential_store, mock_credentials):
+    @patch("the_assistant.integrations.google.client.InstalledAppFlow")
+    async def test_exchange_code_success(self, mock_flow_class, mock_credentials):
         """Test successful code exchange for credentials."""
         mock_flow = MagicMock()
         mock_flow.fetch_token.return_value = None
         mock_flow.credentials = mock_credentials
+        mock_flow_class.from_client_secrets_file.return_value = mock_flow
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
+        client = GoogleClient(user_id=1)
+        # client._oauth_flow should be set by generate_auth_url
+        # We manually set it here for isolated testing
         client._oauth_flow = mock_flow
 
         await client.exchange_code("auth_code", "http://localhost:8080/callback")
 
-        # exchange_code doesn't return credentials, it stores them
         mock_flow.fetch_token.assert_called_once_with(code="auth_code")
-        mock_credential_store.save.assert_called_once_with(1, mock_credentials)
+        self.mock_store_instance.save.assert_called_once_with(1, mock_credentials)
+
+    @patch("the_assistant.integrations.google.client.Request")
+    async def test_get_credentials_success_no_refresh(
+        self, mock_request, mock_credentials
+    ):
+        """Test get_credentials with valid, non-expired credentials."""
+        self.mock_store_instance.get.return_value = mock_credentials
+        mock_credentials.expired = False
+
+        client = GoogleClient(user_id=1)
+        credentials = await client.get_credentials()
+
+        assert credentials == mock_credentials
+        self.mock_store_instance.get.assert_called_once_with(1)
+        mock_credentials.refresh.assert_not_called()
+        self.mock_store_instance.save.assert_not_called()
+
+    @patch("the_assistant.integrations.google.client.Request")
+    async def test_get_credentials_success_with_refresh(
+        self, mock_request, mock_credentials
+    ):
+        """Test get_credentials with expired credentials that are refreshed."""
+        self.mock_store_instance.get.return_value = mock_credentials
+        mock_credentials.expired = True
+        mock_credentials.refresh_token = "some-refresh-token"
+
+        client = GoogleClient(user_id=1)
+        credentials = await client.get_credentials()
+
+        assert credentials == mock_credentials
+        self.mock_store_instance.get.assert_called_once_with(1)
+        mock_credentials.refresh.assert_called_once_with(mock_request())
+        self.mock_store_instance.save.assert_called_once_with(1, mock_credentials)
+
+    async def test_get_credentials_not_found(self):
+        """Test get_credentials when no credentials are in the store."""
+        self.mock_store_instance.get.return_value = None
+
+        client = GoogleClient(user_id=1)
+        credentials = await client.get_credentials()
+
+        assert credentials is None
+        self.mock_store_instance.get.assert_called_once_with(1)
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_calendar_events_success(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_calendar_events_success(self, mock_build, mock_credentials):
         """Test successful calendar events retrieval."""
-        # Mock the Google Calendar API response
         mock_service = MagicMock()
         mock_events = MagicMock()
         mock_list = MagicMock()
@@ -220,25 +261,23 @@ class TestGoogleClient:
             ]
         }
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            events = await client.get_calendar_events()
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        events = await client.get_calendar_events()
-
-        assert len(events) == 1
-        assert isinstance(events[0], CalendarEvent)
-        assert events[0].id == "event1"
-        assert events[0].summary == "Test Event"
+            assert len(events) == 1
+            assert isinstance(events[0], CalendarEvent)
+            assert events[0].id == "event1"
+            assert events[0].summary == "Test Event"
+            mock_build.assert_called_once_with(
+                "calendar", "v3", credentials=mock_credentials
+            )
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_calendar_events_http_error(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_calendar_events_http_error(self, mock_build, mock_credentials):
         """Test calendar events retrieval with HTTP error."""
         mock_service = MagicMock()
         mock_events = MagicMock()
@@ -251,37 +290,27 @@ class TestGoogleClient:
             resp=MagicMock(status=403), content=b'{"error": {"message": "Forbidden"}}'
         )
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            with pytest.raises(GoogleCalendarError, match="Calendar API error"):
+                await client.get_calendar_events()
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        with pytest.raises(GoogleCalendarError, match="Calendar API error"):
-            await client.get_calendar_events()
-
-    @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
-    async def test_get_calendar_events_not_authenticated(
-        self, mock_get_credentials, mock_credential_store
-    ):
+    async def test_get_calendar_events_not_authenticated(self):
         """Test calendar events retrieval when not authenticated."""
-        mock_get_credentials.return_value = None
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = None
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        with pytest.raises(GoogleAuthError, match="No valid credentials available"):
-            await client.get_calendar_events()
+            with pytest.raises(GoogleAuthError, match="No valid credentials available"):
+                await client.get_calendar_events()
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_upcoming_events(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_upcoming_events(self, mock_build, mock_credentials):
         """Test get upcoming events."""
         mock_service = MagicMock()
         mock_events = MagicMock()
@@ -292,26 +321,21 @@ class TestGoogleClient:
         mock_events.list.return_value = mock_list
         mock_list.execute.return_value = {"items": []}
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            events = await client.get_upcoming_events(days_ahead=7)
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        events = await client.get_upcoming_events(days_ahead=7)
-
-        assert events == []
-        # Verify the API was called with correct time range
-        call_args = mock_events.list.call_args[1]
-        assert "timeMin" in call_args
-        assert "timeMax" in call_args
+            assert events == []
+            # Verify the API was called with correct time range
+            call_args = mock_events.list.call_args[1]
+            assert "timeMin" in call_args
+            assert "timeMax" in call_args
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_emails_success(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_emails_success(self, mock_build, mock_credentials):
         """Test successful Gmail messages retrieval."""
         mock_service = MagicMock()
         mock_users = MagicMock()
@@ -340,29 +364,29 @@ class TestGoogleClient:
             "labelIds": ["UNREAD"],
         }
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            emails = await client.get_emails(
+                unread_only=True, sender="sender@example.com"
+            )
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        emails = await client.get_emails(unread_only=True, sender="sender@example.com")
-
-        assert len(emails) == 1
-        assert emails[0].subject == "Test"
-        call_args = mock_messages.list.call_args[1]
-        assert "q" in call_args
-        assert (
-            "is:unread" in call_args["q"]
-            and "from:sender@example.com" in call_args["q"]
-        )
+            assert len(emails) == 1
+            assert emails[0].subject == "Test"
+            call_args = mock_messages.list.call_args[1]
+            assert "q" in call_args
+            assert (
+                "is:unread" in call_args["q"]
+                and "from:sender@example.com" in call_args["q"]
+            )
+            mock_build.assert_called_once_with(
+                "gmail", "v1", credentials=mock_credentials
+            )
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_emails_http_error(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_emails_http_error(self, mock_build, mock_credentials):
         """Test Gmail retrieval with HTTP error."""
         mock_service = MagicMock()
         mock_users = MagicMock()
@@ -377,37 +401,27 @@ class TestGoogleClient:
             resp=MagicMock(status=403), content=b"{}"
         )
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            with pytest.raises(GoogleGmailError, match="Gmail API error"):
+                await client.get_emails()
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        with pytest.raises(GoogleGmailError, match="Gmail API error"):
-            await client.get_emails()
-
-    @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
-    async def test_get_emails_not_authenticated(
-        self, mock_get_credentials, mock_credential_store
-    ):
+    async def test_get_emails_not_authenticated(self):
         """Test Gmail retrieval when not authenticated."""
-        mock_get_credentials.return_value = None
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = None
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        with pytest.raises(GoogleAuthError, match="No valid credentials available"):
-            await client.get_emails()
+            with pytest.raises(GoogleAuthError, match="No valid credentials available"):
+                await client.get_emails()
 
     @patch("the_assistant.integrations.google.client.build")
-    async def test_get_events_by_date(
-        self, mock_build, mock_credential_store, mock_credentials
-    ):
+    async def test_get_events_by_date(self, mock_build, mock_credentials):
         """Test get events by specific date."""
         mock_service = MagicMock()
         mock_events = MagicMock()
@@ -418,19 +432,16 @@ class TestGoogleClient:
         mock_events.list.return_value = mock_list
         mock_list.execute.return_value = {"items": []}
 
-        mock_credential_store.get_credentials.return_value = mock_credentials
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            target_date = datetime(2024, 1, 1, tzinfo=UTC)
+            events = await client.get_events_by_date(target_date)
 
-        client = GoogleClient(
-            user_id=1,
-            credential_store=mock_credential_store,
-            credentials_path="/path/to/creds.json",
-        )
-
-        target_date = datetime(2024, 1, 1, tzinfo=UTC)
-        events = await client.get_events_by_date(target_date)
-
-        assert events == []
-        # Verify the API was called with correct date range
-        call_args = mock_events.list.call_args[1]
-        assert "timeMin" in call_args
-        assert "timeMax" in call_args
+            assert events == []
+            # Verify the API was called with correct date range
+            call_args = mock_events.list.call_args[1]
+            assert "timeMin" in call_args
+            assert "timeMax" in call_args

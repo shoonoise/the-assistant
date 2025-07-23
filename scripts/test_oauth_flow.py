@@ -49,21 +49,8 @@ async def test_google_client():
     """Test Google client operations."""
     print("Testing Google client...")
     
-    # Get configuration
-    database_url = os.getenv(
-        "DATABASE_URL", 
-        "postgresql://temporal:temporal@localhost:5432/the_assistant"
-    )
-    encryption_key = os.getenv("DB_ENCRYPTION_KEY")
-    if not encryption_key:
-        raise SystemExit("DB_ENCRYPTION_KEY is required")
-    
-    # Create store and client
-    store = PostgresCredentialStore(database_url, encryption_key)
     client = GoogleClient(
-        user_id=1,
-        credential_store=store,
-        credentials_path="secrets/google.json"
+        user_id=1
     )
     
     # Test authentication status
