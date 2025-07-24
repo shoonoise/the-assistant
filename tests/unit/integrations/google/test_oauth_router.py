@@ -43,7 +43,7 @@ async def test_oauth_callback_sends_notification():
             return_value=google_client,
         ),
         patch(
-            "the_assistant.integrations.google.oauth_router.get_telegram_client",
+            "the_assistant.integrations.google.oauth_router.TelegramClient",
             return_value=telegram_client,
         ),
     ):
@@ -52,10 +52,9 @@ async def test_oauth_callback_sends_notification():
             state=state,
             error=None,
             settings=settings,
-            telegram_client=telegram_client,
         )
 
     google_client.exchange_code.assert_awaited_once_with("code")
     telegram_client.send_message.assert_awaited_once_with(
-        chat_id=456, text="✅ Google authentication successful!"
+        text="✅ Google authentication successful!"
     )

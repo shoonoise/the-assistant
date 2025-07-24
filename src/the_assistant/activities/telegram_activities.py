@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SendMessageInput:
     user_id: int
-    chat_id: int
     text: str
     parse_mode: str = "Markdown"
 
@@ -26,7 +25,6 @@ class SendMessageInput:
 @dataclass
 class SendFormattedMessageInput:
     user_id: int
-    chat_id: int
     title: str
     content: str
     parse_mode: str = "Markdown"
@@ -40,21 +38,20 @@ async def send_message(
     Activity to send a text message to a Telegram chat.
 
     Args:
-        input: SendMessageInput containing user_id, chat_id, text, and parse_mode
+        input: SendMessageInput containing user_id, text, and parse_mode
 
     Returns:
         True if the message was sent successfully
 
     Raises:
-        ValueError: If telegram token is not configured
+        ValueError: If telegram token is not configured or user not found
         Exception: If message sending fails
     """
-    logger.info(f"Sending message to chat {input.chat_id} for user {input.user_id}")
+    logger.info(f"Sending message for user {input.user_id}")
 
     client = TelegramClient(user_id=input.user_id)
 
     return await client.send_message(
-        chat_id=input.chat_id,
         text=input.text,
         parse_mode=input.parse_mode,
     )
@@ -68,16 +65,16 @@ async def send_formatted_message(
     Activity to send a formatted message with title and content.
 
     Args:
-        input: SendFormattedMessageInput containing user_id, chat_id, title, content, and parse_mode
+        input: SendFormattedMessageInput containing user_id, title, content, and parse_mode
 
     Returns:
         True if the message was sent successfully
 
     Raises:
-        ValueError: If telegram token is not configured
+        ValueError: If telegram token is not configured or user not found
         Exception: If message sending fails
     """
-    logger.info(f"Sending formatted message to chat {input.chat_id}: {input.title}")
+    logger.info(f"Sending formatted message for user {input.user_id}: {input.title}")
 
     # Format the message with title and content
     if input.parse_mode == "Markdown":
@@ -90,7 +87,6 @@ async def send_formatted_message(
     return await send_message(
         SendMessageInput(
             user_id=input.user_id,
-            chat_id=input.chat_id,
             text=formatted_text,
             parse_mode=input.parse_mode,
         )

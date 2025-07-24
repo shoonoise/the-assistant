@@ -16,6 +16,7 @@ from telegram.error import (
 
 from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
+    handle_briefing_command,
     handle_google_auth_command,
 )
 
@@ -176,23 +177,44 @@ class TestTelegramClient:
     @pytest.mark.asyncio
     async def test_send_message_success(self, telegram_client):
         """Test successful message sending."""
-        result = await telegram_client.send_message(123, "Test message")
-        assert result is True
-        telegram_client.bot.send_message.assert_called_once_with(
-            chat_id=123, text="Test message", parse_mode=ParseMode.MARKDOWN
-        )
+        # Mock user service to return a user with telegram_chat_id
+        mock_user = SimpleNamespace(telegram_chat_id=123)
+        with patch("the_assistant.db.get_user_service") as mock_get_service:
+            mock_service = AsyncMock()
+            mock_service.get_user_by_id.return_value = mock_user
+            mock_get_service.return_value = mock_service
+
+            result = await telegram_client.send_message("Test message")
+
+            assert result is True
+            mock_service.get_user_by_id.assert_called_once_with(
+                1
+            )  # user_id from fixture
+            telegram_client.bot.send_message.assert_called_once_with(
+                chat_id=123, text="Test message", parse_mode=ParseMode.MARKDOWN
+            )
 
     @pytest.mark.asyncio
     async def test_send_message_error_with_retry(self, telegram_client):
         """Test message sending with error and retry."""
+        # Mock user service to return a user with telegram_chat_id
+        mock_user = SimpleNamespace(telegram_chat_id=123)
+
         telegram_client.bot.send_message.side_effect = [
             NetworkError("Network error"),
             None,
         ]
-        with patch.object(
-            telegram_client, "_handle_message_error", AsyncMock(return_value=True)
-        ) as mock_handle_error:
-            result = await telegram_client.send_message(123, "Test message")
+        with (
+            patch("the_assistant.db.get_user_service") as mock_get_service,
+            patch.object(
+                telegram_client, "_handle_message_error", AsyncMock(return_value=True)
+            ) as mock_handle_error,
+        ):
+            mock_service = AsyncMock()
+            mock_service.get_user_by_id.return_value = mock_user
+            mock_get_service.return_value = mock_service
+
+            result = await telegram_client.send_message("Test message")
             assert result is True
             assert mock_handle_error.call_count == 1
             assert telegram_client.bot.send_message.call_count == 2
@@ -200,11 +222,21 @@ class TestTelegramClient:
     @pytest.mark.asyncio
     async def test_send_message_error_without_retry(self, telegram_client):
         """Test message sending with error and no retry."""
+        # Mock user service to return a user with telegram_chat_id
+        mock_user = SimpleNamespace(telegram_chat_id=123)
+
         telegram_client.bot.send_message.side_effect = BadRequest("Bad request")
-        with patch.object(
-            telegram_client, "_handle_message_error", AsyncMock(return_value=False)
-        ) as mock_handle_error:
-            result = await telegram_client.send_message(123, "Test message")
+        with (
+            patch("the_assistant.db.get_user_service") as mock_get_service,
+            patch.object(
+                telegram_client, "_handle_message_error", AsyncMock(return_value=False)
+            ) as mock_handle_error,
+        ):
+            mock_service = AsyncMock()
+            mock_service.get_user_by_id.return_value = mock_user
+            mock_get_service.return_value = mock_service
+
+            result = await telegram_client.send_message("Test message")
             assert result is False
             assert mock_handle_error.call_count == 1
             assert telegram_client.bot.send_message.call_count == 1
@@ -346,3 +378,115 @@ class TestTelegramClient:
         ):
             with pytest.raises(ValueError):
                 await handle_google_auth_command(mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_handle_briefing_command_success(self, mock_update, mock_context):
+        """Test successful briefing command execution."""
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        # Mock Temporal client
+        mock_client = AsyncMock()
+        mock_handle = AsyncMock()
+        mock_handle.id = "briefing-1-123456789"
+        mock_client.start_workflow = AsyncMock(return_value=mock_handle)
+
+        settings = SimpleNamespace(
+            temporal_host="localhost:7233",
+            temporal_namespace="default",
+            temporal_task_queue="the-assistant",
+        )
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_settings",
+                return_value=settings,
+            ),
+            patch(
+                "temporalio.client.Client.connect",
+                AsyncMock(return_value=mock_client),
+            ),
+            patch("time.time", return_value=123456789),
+        ):
+            await handle_briefing_command(mock_update, mock_context)
+
+        # Verify user lookup
+        user_service.get_user_by_telegram_chat_id.assert_called_once_with(123)
+
+        # Verify workflow was started
+        mock_client.start_workflow.assert_called_once()
+        args, kwargs = mock_client.start_workflow.call_args
+        assert kwargs["id"] == "briefing-1-123456789"
+        assert kwargs["task_queue"] == "the-assistant"
+        assert args[1] == 1  # user.id
+
+        # Verify messages were sent
+        assert mock_update.message.reply_text.call_count == 2
+        calls = mock_update.message.reply_text.call_args_list
+        assert "Generating your briefing" in calls[0][0][0]
+        assert "being generated and will be delivered" in calls[1][0][0]
+
+    @pytest.mark.asyncio
+    async def test_handle_briefing_command_unregistered_user(
+        self, mock_update, mock_context
+    ):
+        """Test briefing command with unregistered user."""
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            await handle_briefing_command(mock_update, mock_context)
+
+        # Verify user lookup
+        user_service.get_user_by_telegram_chat_id.assert_called_once_with(123)
+
+        # Verify error message was sent
+        assert mock_update.message.reply_text.call_count == 2
+        calls = mock_update.message.reply_text.call_args_list
+        assert "Generating your briefing" in calls[0][0][0]
+        assert "need to register first" in calls[1][0][0]
+
+    @pytest.mark.asyncio
+    async def test_handle_briefing_command_temporal_error(
+        self, mock_update, mock_context
+    ):
+        """Test briefing command with Temporal connection error."""
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        settings = SimpleNamespace(
+            temporal_host="localhost:7233",
+            temporal_namespace="default",
+            temporal_task_queue="the-assistant",
+        )
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_settings",
+                return_value=settings,
+            ),
+            patch(
+                "temporalio.client.Client.connect",
+                AsyncMock(side_effect=Exception("Connection failed")),
+            ),
+        ):
+            await handle_briefing_command(mock_update, mock_context)
+
+        # Verify error message was sent
+        assert mock_update.message.reply_text.call_count == 2
+        calls = mock_update.message.reply_text.call_args_list
+        assert "Generating your briefing" in calls[0][0][0]
+        assert "encountered an error" in calls[1][0][0]

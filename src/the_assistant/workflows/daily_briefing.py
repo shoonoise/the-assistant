@@ -44,13 +44,10 @@ class DailyBriefing:
             start_to_close_timeout=timedelta(seconds=10),
         )
 
-        chat_id = user_id  # TODO: should fetch chat ID per user
-
         await workflow.execute_activity(
             send_message,
             SendMessageInput(
                 user_id=user_id,
-                chat_id=chat_id,
                 text=briefing,
             ),
             start_to_close_timeout=timedelta(seconds=10),

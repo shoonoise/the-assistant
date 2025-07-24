@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -23,6 +24,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 
 from the_assistant.db import get_user_service
 from the_assistant.integrations.google.client import GoogleClient
@@ -149,35 +152,49 @@ class TelegramClient:
 
     async def send_message(
         self,
-        chat_id: int,
         text: str,
         parse_mode: str = ParseMode.MARKDOWN,
         retry_count: int = 0,
     ) -> bool:
-        """Send a text message to a specific chat.
+        """Send a text message to the user's chat.
 
         Args:
-            chat_id: The chat ID to send the message to.
             text: The text message to send.
             parse_mode: The parse mode to use for the message.
             retry_count: The current retry count (used internally for retries).
 
         Returns:
             bool: True if the message was sent successfully, False otherwise.
+
+        Raises:
+            ValueError: If user_id is not set or user not found in database.
         """
+        if self.user_id is None:
+            raise ValueError("user_id must be set to send messages")
+
+        from the_assistant.db import get_user_service
+
+        user_service = get_user_service()
+        user = await user_service.get_user_by_id(self.user_id)
+
+        if not user or not user.telegram_chat_id:
+            raise ValueError(
+                f"User {self.user_id} not found or has no telegram_chat_id"
+            )
+
+        chat_id = user.telegram_chat_id
+
         try:
             await self.bot.send_message(
                 chat_id=chat_id, text=text, parse_mode=parse_mode
             )
-            logger.info(f"Message sent to {chat_id}")
+            logger.info(f"Message sent to user {self.user_id} (chat {chat_id})")
             return True
 
         except Exception as e:
             should_retry = await self._handle_message_error(e, chat_id, retry_count)
             if should_retry:
-                return await self.send_message(
-                    chat_id, text, parse_mode, retry_count + 1
-                )
+                return await self.send_message(text, parse_mode, retry_count + 1)
             return False
 
     async def register_command_handler(
@@ -388,7 +405,7 @@ async def handle_briefing_command(
         )
         return
 
-    user_id = update.effective_user.id
+    telegram_user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     logger.debug(f"Briefing requested in chat {chat_id}")
 
@@ -396,28 +413,63 @@ async def handle_briefing_command(
     await update.message.reply_text(
         "🔄 Generating your briefing... This may take a moment."
     )
-    logger.info(f"Received briefing request from user {user_id}")
+    logger.info(f"Received briefing request from telegram user {telegram_user_id}")
 
     try:
-        # For now, send a message explaining the briefing
-        briefing_message = (
-            "🌞 *Your Daily Briefing*\n\n"
-            "This command would trigger the generation and delivery of your daily briefing.\n\n"
-            "When fully integrated with the workflow system, it will include:\n"
-            "• Your calendar events for today and tomorrow\n"
-            "• Pending tasks from your Obsidian notes\n"
-            "• Important reminders\n\n"
-            "The briefing functionality has been implemented and is ready to be "
-            "integrated with the workflow system."
+        # Get the user from the database
+        user_service = get_user_service()
+        user = await user_service.get_user_by_telegram_chat_id(telegram_user_id)
+
+        if not user:
+            await update.message.reply_text(
+                "❌ You need to register first. Please use /start to register."
+            )
+            logger.warning(
+                f"Unregistered user {telegram_user_id} tried to use /briefing"
+            )
+            return
+
+        settings = get_settings()
+
+        # Connect to Temporal with Pydantic V2 converter
+        logger.info(f"Connecting to Temporal server at {settings.temporal_host}")
+        client = await Client.connect(
+            settings.temporal_host,
+            data_converter=pydantic_data_converter,
+            namespace=settings.temporal_namespace,
+        )
+        logger.info("Connected to Temporal server")
+
+        # TODO: refactor
+        from the_assistant.workflows.daily_briefing import DailyBriefing
+
+        # Start the workflow
+        logger.info(f"Starting DailyBriefing workflow for user {user.id}")
+
+        workflow_id = f"briefing-{user.id}-{int(time.time())}"
+
+        handle = await client.start_workflow(
+            DailyBriefing.run,
+            user.id,
+            id=workflow_id,
+            task_queue=settings.temporal_task_queue,
         )
 
-        await update.message.reply_text(briefing_message, parse_mode=ParseMode.MARKDOWN)
-        logger.info(f"Sent briefing explanation to user {user_id}")
+        logger.info(f"Workflow started with ID: {handle.id} for user {user.id}")
+
+        # Send confirmation that the workflow was started
+        await update.message.reply_text(
+            "✅ Your briefing is being generated and will be delivered shortly!"
+        )
+
+        logger.info(f"Successfully started briefing workflow for user {user.id}")
 
     except Exception as e:
-        error_message = "Sorry, I encountered an error while generating your briefing. Please try again later."
+        error_message = "❌ Sorry, I encountered an error while generating your briefing. Please try again later."
         await update.message.reply_text(error_message)
-        logger.error(f"Error generating briefing for user {user_id}: {e}")
+        logger.error(
+            f"Error generating briefing for telegram user {telegram_user_id}: {e}"
+        )
 
 
 async def handle_settings_command(

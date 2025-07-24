@@ -31,7 +31,7 @@ class TestTelegramActivities:
         mock_telegram_client_class.return_value = mock_telegram_client
 
         input_data = SendMessageInput(
-            user_id=1, chat_id=123456789, text="Test message", parse_mode="Markdown"
+            user_id=1, text="Test message", parse_mode="Markdown"
         )
 
         result = await send_message(input_data)
@@ -39,7 +39,7 @@ class TestTelegramActivities:
         assert result is True
         mock_telegram_client_class.assert_called_once_with(user_id=1)
         mock_telegram_client.send_message.assert_called_once_with(
-            chat_id=123456789, text="Test message", parse_mode="Markdown"
+            text="Test message", parse_mode="Markdown"
         )
 
     @patch("the_assistant.activities.telegram_activities.TelegramClient")
@@ -49,13 +49,14 @@ class TestTelegramActivities:
         """Test message sending with default parse mode."""
         mock_telegram_client_class.return_value = mock_telegram_client
 
-        input_data = SendMessageInput(user_id=1, chat_id=123456789, text="Test message")
+        input_data = SendMessageInput(user_id=1, text="Test message")
 
         result = await send_message(input_data)
 
         assert result is True
+        mock_telegram_client_class.assert_called_once_with(user_id=1)
         mock_telegram_client.send_message.assert_called_once_with(
-            chat_id=123456789, text="Test message", parse_mode="Markdown"
+            text="Test message", parse_mode="Markdown"
         )
 
     @patch("the_assistant.activities.telegram_activities.send_message")
@@ -65,7 +66,6 @@ class TestTelegramActivities:
 
         input_data = SendFormattedMessageInput(
             user_id=1,
-            chat_id=123456789,
             title="Test Title",
             content="Test content",
             parse_mode="Markdown",
@@ -77,7 +77,6 @@ class TestTelegramActivities:
         mock_send_message.assert_called_once()
         call_args = mock_send_message.call_args
         assert call_args[0][0].user_id == 1
-        assert call_args[0][0].chat_id == 123456789
         assert call_args[0][0].text == "**Test Title**\n\nTest content"
         assert call_args[0][0].parse_mode == "Markdown"
 
@@ -88,7 +87,6 @@ class TestTelegramActivities:
 
         input_data = SendFormattedMessageInput(
             user_id=1,
-            chat_id=123456789,
             title="Test Title",
             content="Test content",
             parse_mode="HTML",
@@ -100,7 +98,6 @@ class TestTelegramActivities:
         mock_send_message.assert_called_once()
         call_args = mock_send_message.call_args
         assert call_args[0][0].user_id == 1
-        assert call_args[0][0].chat_id == 123456789
         assert call_args[0][0].text == "<b>Test Title</b>\n\nTest content"
         assert call_args[0][0].parse_mode == "HTML"
 
@@ -111,7 +108,6 @@ class TestTelegramActivities:
 
         input_data = SendFormattedMessageInput(
             user_id=1,
-            chat_id=123456789,
             title="Test Title",
             content="Test content",
             parse_mode="None",
@@ -123,6 +119,5 @@ class TestTelegramActivities:
         mock_send_message.assert_called_once()
         call_args = mock_send_message.call_args
         assert call_args[0][0].user_id == 1
-        assert call_args[0][0].chat_id == 123456789
         assert call_args[0][0].text == "Test Title\n\nTest content"
         assert call_args[0][0].parse_mode == "None"
