@@ -16,6 +16,10 @@ from .telegram_activities import (
     send_formatted_message,
     send_message,
 )
+from .messages_activities import (
+    build_daily_briefing,
+    build_briefing_summary,
+)
 from .weather_activities import get_weather_forecast
 
 __all__ = [
@@ -31,6 +35,7 @@ __all__ = [
     "get_weather_forecast",
     # Telegram activities
     "build_daily_briefing",
+    "build_briefing_summary",
     "send_formatted_message",
     "send_message",
 ]

@@ -42,6 +42,9 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "alembic>=1.13.0",
     "greenlet>=3.0.0",
+    "langchain>=0.3.27",
+    "langchain-openai>=0.3.28",
+    "langsmith>=0.4.0",
 ]
 
 [project.urls]
@@ -91,6 +94,7 @@ markers = [
     "slow: Slow-running tests",
     "google: Google API integration tests",
     "telegram: Telegram bot integration tests",
+    "asyncio: asyncio tests",
 ]
 asyncio_mode = "auto"
 filterwarnings = [
