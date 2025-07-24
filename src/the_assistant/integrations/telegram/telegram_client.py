@@ -298,7 +298,7 @@ async def handle_start_command(
 
     existing = await user_service.get_user_by_telegram_chat_id(user.id)  # type: ignore[arg-type]
     if existing is None:
-        await user_service.create_user(
+        existing = await user_service.create_user(
             telegram_chat_id=user.id,  # type: ignore[arg-type]
             username=user.username,  # type: ignore[arg-type]
             first_name=user.first_name,  # type: ignore[arg-type]
@@ -306,7 +306,7 @@ async def handle_start_command(
             registered_at=datetime.now(UTC),
         )
     else:
-        await user_service.update_user(
+        existing = await user_service.update_user(
             existing.id,
             username=user.username or existing.username,  # type: ignore[arg-type]
             first_name=user.first_name or existing.first_name,  # type: ignore[arg-type]
