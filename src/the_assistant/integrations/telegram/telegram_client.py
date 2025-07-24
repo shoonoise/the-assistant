@@ -451,7 +451,9 @@ async def handle_google_auth_command(
     """
 
     chat_user = update.effective_user
-    user_service = get_user_service()
+    if not chat_user or not update.message:
+        logger.warning("google_auth command received without effective_user or message")
+        return
 
     user = await user_service.get_user_by_telegram_chat_id(chat_user.id)  # type: ignore[arg-type]
     if not user:
