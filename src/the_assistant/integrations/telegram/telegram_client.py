@@ -172,8 +172,6 @@ class TelegramClient:
         if self.user_id is None:
             raise ValueError("user_id must be set to send messages")
 
-        from the_assistant.db import get_user_service
-
         user_service = get_user_service()
         user = await user_service.get_user_by_id(self.user_id)
 

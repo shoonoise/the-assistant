@@ -21,14 +21,15 @@ class DatabaseManager:
 
     def __init__(self, database_url: str | None = None):
         """Initialize the database manager with optional database URL."""
-        self._database_url = database_url or get_settings().database_url
+        self._database_url = database_url
         self._engine: AsyncEngine | None = None
         self._session_maker: async_sessionmaker[AsyncSession] | None = None
 
     def _ensure_initialized(self) -> None:
         """Ensure engine and session maker are initialized."""
         if self._session_maker is None:
-            self._engine = create_async_engine(self._database_url, echo=False)
+            database_url = self._database_url or get_settings().database_url
+            self._engine = create_async_engine(database_url, echo=False)
             self._session_maker = async_sessionmaker(
                 self._engine, expire_on_commit=False
             )

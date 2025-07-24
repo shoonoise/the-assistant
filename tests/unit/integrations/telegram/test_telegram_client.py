@@ -179,7 +179,9 @@ class TestTelegramClient:
         """Test successful message sending."""
         # Mock user service to return a user with telegram_chat_id
         mock_user = SimpleNamespace(telegram_chat_id=123)
-        with patch("the_assistant.db.get_user_service") as mock_get_service:
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service"
+        ) as mock_get_service:
             mock_service = AsyncMock()
             mock_service.get_user_by_id.return_value = mock_user
             mock_get_service.return_value = mock_service
@@ -205,7 +207,9 @@ class TestTelegramClient:
             None,
         ]
         with (
-            patch("the_assistant.db.get_user_service") as mock_get_service,
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service"
+            ) as mock_get_service,
             patch.object(
                 telegram_client, "_handle_message_error", AsyncMock(return_value=True)
             ) as mock_handle_error,
@@ -227,7 +231,9 @@ class TestTelegramClient:
 
         telegram_client.bot.send_message.side_effect = BadRequest("Bad request")
         with (
-            patch("the_assistant.db.get_user_service") as mock_get_service,
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service"
+            ) as mock_get_service,
             patch.object(
                 telegram_client, "_handle_message_error", AsyncMock(return_value=False)
             ) as mock_handle_error,
