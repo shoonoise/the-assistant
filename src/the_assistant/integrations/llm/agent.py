@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 
 from langchain.callbacks.tracers.langchain import LangChainTracer
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langsmith import trace
@@ -47,7 +48,7 @@ class LLMAgent:
         prompt = ChatPromptTemplate.from_messages(
             [("system", self.system_prompt), ("human", task.prompt)]
         )
-        chain = prompt | self.model
+        chain = prompt | self.model | StrOutputParser()
         if self.langsmith_project:
             chain = chain.with_config(
                 {
