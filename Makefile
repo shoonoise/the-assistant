@@ -135,3 +135,9 @@ dev: dev-install ## Setup development environment
 
 ci: check ## Run CI checks locally
 	@echo "$(GREEN)🎯 Ready for CI!$(RESET)"
+
+migrate: ## Run database migrations
+	DATABASE_URL="postgresql+asyncpg://temporal:temporal@localhost:5432/the_assistant" uv run alembic upgrade head
+
+migration: ## Create new migration (usage: make migration MESSAGE="description")
+	DATABASE_URL="postgresql+asyncpg://temporal:temporal@localhost:5432/the_assistant" uv run alembic revision --autogenerate -m "$(MESSAGE)"

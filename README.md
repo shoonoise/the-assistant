@@ -80,26 +80,16 @@ the-assistant/
 
 5. **Initialize the database**:
 
-   ```bash
-   uv run python scripts/init_db.py
-   ```
-
-   This will create the database and tables with the proper schema. The script requires the `DB_ENCRYPTION_KEY` environment variable to be set.
-
-   Additional options:
 
    ```bash
    # For verbose output
-   uv run python scripts/init_db.py --verbose
-   
-   # To skip database creation and only create tables
-   uv run python scripts/init_db.py --skip-db-creation
+   uv run python scripts/init_db_with_migrations.py --verbose
    
    # To specify a custom database URL
-   uv run python scripts/init_db.py --database-url postgresql://user:pass@host:port/dbname
+   uv run python scripts/init_db_with_migrations.py --database-url postgresql+asyncpg://user:pass@host:port/dbname
    
-   # To log to a file instead of stdout
-   uv run python scripts/init_db.py --log-file init_db.log
+   # To run only migrations (if database already exists)
+   make migrate
    ```
 
 6. **Start services**:
@@ -155,9 +145,9 @@ application will exit if it is missing.
 
 ### Database Schema
 
-The application uses a PostgreSQL database with the following schema:
+The application uses a PostgreSQL database with SQLAlchemy models and Alembic migrations for schema management:
 
-1. **Users Table**: Stores user authentication and identity information
+1. **Users Table**: Stores user identity and integration information
    - `id`: Primary key
    - `auth_provider`: Authentication provider (e.g., "telegram", "google")
    - `external_id`: External identifier from the auth provider
@@ -173,7 +163,12 @@ The application uses a PostgreSQL database with the following schema:
    - `value_json`: Setting value stored as JSON text
    - Timestamps for creation and updates
 
-The database can be initialized using the `scripts/init_db.py` script, which creates both tables with appropriate indexes and constraints.
+The database schema is managed using Alembic migrations. Use `make init-db` to initialize the database or `make migrate` to apply new migrations.
+
+**Creating new migrations:**
+```bash
+make migration MESSAGE="Add new feature"
+```
 
 ### Obsidian Integration
 
@@ -305,10 +300,9 @@ The project follows Python packaging standards with:
    - Ensure PostgreSQL is running
    - Check database connection parameters
    - Verify `DB_ENCRYPTION_KEY` is set in `.env`
-   - Run `uv run python scripts/init_db.py --verbose` for detailed logs
-   - Check if the database already exists and has conflicting schema
+   - Run `make init-db` or use `--verbose` flag for detailed logs
+   - Check migration status with `uv run alembic current`
    - Ensure the user has permissions to create databases and tables
-   - For permission errors, try running with `--skip-db-creation` and create the database manually
 
 ### Logs
 

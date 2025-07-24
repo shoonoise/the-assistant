@@ -27,7 +27,7 @@ pytestmark = pytest.mark.filterwarnings(
 def mock_settings(monkeypatch):
     """Mock application settings."""
     settings = MagicMock()
-    settings.database_url = "postgresql://test:test@localhost/test"
+    settings.database_url = "postgresql+asyncpg://test:test@localhost/test"
     settings.db_encryption_key = "test_key"
     settings.google_credentials_path = Path("/path/to/creds.json")
     settings.google_oauth_scopes = [

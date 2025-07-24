@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Storage / database
     database_url: str = Field(
-        "postgresql://temporal:temporal@postgresql:5432/the_assistant",
+        "postgresql+asyncpg://temporal:temporal@postgresql:5432/the_assistant",
         env="DATABASE_URL",
     )
     db_encryption_key: str = Field(..., env="DB_ENCRYPTION_KEY")
