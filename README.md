@@ -20,7 +20,7 @@ the-assistant/
 │   │   └── helpers.py
 │   └── workflows/               # Temporal workflows
 │       ├── french_lesson.py
-│       ├── morning_briefing.py
+│       ├── daily_briefing.py
 │       └── trip_reminder.py
 ├── tests/                       # Test suite
 │   ├── unit/                   # Unit tests
@@ -238,12 +238,12 @@ Monitors Google Calendar for French lesson events and sends preparation reminder
 **Trigger**: Calendar events matching "French Lesson"
 **Features**: Pre-lesson notifications, post-lesson feedback
 
-#### Morning Briefing
+#### Daily Briefing
 
-Provides daily summary of calendar events and pending tasks.
+Summarizes today's and tomorrow's events along with the local weather forecast and a list of recent unread emails.
 
-**Trigger**: Scheduled (daily morning)
-**Content**: Today's events + notes with pending tasks
+**Trigger**: Scheduled (morning) or manual
+**Content**: Weather, events for today and tomorrow, top unread emails and tasks
 
 ## Development
 
