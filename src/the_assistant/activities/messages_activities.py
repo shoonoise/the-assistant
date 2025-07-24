@@ -4,7 +4,6 @@ from datetime import date
 
 from temporalio import activity
 
-
 from the_assistant.integrations.llm import LLMAgent, Task
 from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.weather import WeatherForecast

@@ -8,17 +8,16 @@ from .google_activities import (
     get_today_events,
     get_upcoming_events,
 )
-from .messages_activities import build_daily_briefing
+from .messages_activities import (
+    build_briefing_summary,
+    build_daily_briefing,
+)
 from .obsidian_activities import (
     scan_vault_notes,
 )
 from .telegram_activities import (
     send_formatted_message,
     send_message,
-)
-from .messages_activities import (
-    build_daily_briefing,
-    build_briefing_summary,
 )
 from .weather_activities import get_weather_forecast
 

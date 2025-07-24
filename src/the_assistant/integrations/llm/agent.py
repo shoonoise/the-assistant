@@ -3,21 +3,21 @@
 import logging
 from dataclasses import dataclass
 
+from langchain.callbacks.tracers.langchain import LangChainTracer
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.callbacks.tracers.langchain import LangChainTracer
 from langsmith import trace
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a personal assistant. Your task is to help the user with day to day"
-    " life."
+    "You are a personal assistant. Your task is to help the user with day to day life."
 )
+
 
 def _default_model() -> ChatOpenAI:
     """Create default ChatOpenAI model."""
-    return ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+    return ChatOpenAI(model="gpt-4o-mini", temperature=0.3)  # type: ignore[unknown-argument]
 
 
 @dataclass

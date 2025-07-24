@@ -1,5 +1,5 @@
-from langchain_core.language_models.fake import FakeListLLM
 import pytest
+from langchain_core.language_models.fake import FakeListLLM
 
 from the_assistant.integrations.llm import LLMAgent, Task
 
@@ -37,4 +37,3 @@ async def test_llm_agent_langsmith(monkeypatch):
 
     assert tracer_called
     assert "Hi" in result
-
