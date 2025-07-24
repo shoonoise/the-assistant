@@ -25,6 +25,8 @@ from telegram.ext import (
 )
 
 from the_assistant.db import get_user_service
+from the_assistant.integrations.google.client import GoogleClient
+from the_assistant.integrations.google.oauth_state import create_state_jwt
 from the_assistant.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -438,6 +440,42 @@ async def handle_settings_command(
     logger.info(f"Sent settings to user {user_id}")
 
 
+async def handle_google_auth_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle the /google_auth command.
+
+    Sends the user a Google OAuth authorization link if they are not yet
+    authenticated. When the OAuth flow completes the user will receive a
+    confirmation message.
+    """
+
+    chat_user = update.effective_user
+    user_service = get_user_service()
+
+    user = await user_service.get_user_by_telegram_chat_id(chat_user.id)  # type: ignore[arg-type]
+    if not user:
+        raise ValueError("User not registered")
+
+    client = GoogleClient(user.id)
+    if await client.is_authenticated():
+        await update.message.reply_text(
+            "✅ You are already authenticated with Google.",
+        )  # type: ignore
+        return
+
+    settings = get_settings()
+    state = create_state_jwt(user.id, settings)
+    auth_url = await client.generate_auth_url(state)
+
+    message = (
+        f"Please [authorize access]({auth_url}) to your Google account. "
+        "You'll receive a confirmation once completed."
+    )
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
+    logger.info(f"Sent Google auth link to user {chat_user.id}")  # type: ignore[arg-type]
+
+
 async def create_telegram_client() -> TelegramClient:
     """Create a TelegramClient instance using environment variables.
 
@@ -462,5 +500,6 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("help", handle_help_command)
     await client.register_command_handler("briefing", handle_briefing_command)
     await client.register_command_handler("settings", handle_settings_command)
+    await client.register_command_handler("google_auth", handle_google_auth_command)
 
     return client

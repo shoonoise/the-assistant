@@ -14,7 +14,10 @@ from telegram.error import (
     TelegramError,
 )
 
-from the_assistant.integrations.telegram.telegram_client import TelegramClient
+from the_assistant.integrations.telegram.telegram_client import (
+    TelegramClient,
+    handle_google_auth_command,
+)
 
 
 @pytest.fixture
@@ -260,3 +263,86 @@ class TestTelegramClient:
             # Test calling setup again (should not recreate application)
             await telegram_client.setup_command_handlers()
             mock_builder.assert_called_once()  # Still only called once
+
+    @pytest.mark.asyncio
+    async def test_handle_google_auth_command_send_link(
+        self, mock_update, mock_context
+    ):
+        """Ensure auth link is sent when user is not authenticated."""
+
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        google_client = AsyncMock()
+        google_client.is_authenticated = AsyncMock(return_value=False)
+        google_client.generate_auth_url = AsyncMock(return_value="http://auth")
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.GoogleClient",
+                return_value=google_client,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.create_state_jwt",
+                return_value="state",
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_settings",
+                return_value=SimpleNamespace(jwt_secret="test-secret"),
+            ),
+        ):
+            await handle_google_auth_command(mock_update, mock_context)
+
+        google_client.generate_auth_url.assert_awaited_once_with("state")
+        assert mock_update.message.reply_text.called
+        assert "http://auth" in mock_update.message.reply_text.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_handle_google_auth_command_already_authenticated(
+        self, mock_update, mock_context
+    ):
+        """A message is shown if the user is already authenticated."""
+
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        google_client = AsyncMock()
+        google_client.is_authenticated = AsyncMock(return_value=True)
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.GoogleClient",
+                return_value=google_client,
+            ),
+        ):
+            await handle_google_auth_command(mock_update, mock_context)
+
+        google_client.is_authenticated.assert_awaited_once()
+        assert mock_update.message.reply_text.called
+        assert "already" in mock_update.message.reply_text.call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_handle_google_auth_command_unregistered_user(
+        self, mock_update, mock_context
+    ):
+        """An error is raised if the user is not registered."""
+
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            with pytest.raises(ValueError):
+                await handle_google_auth_command(mock_update, mock_context)
