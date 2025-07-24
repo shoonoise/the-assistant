@@ -33,6 +33,11 @@ def get_google_client(
     return GoogleClient(user_id=user_id)
 
 
+def get_telegram_client() -> TelegramClient:
+    """Dependency to get Telegram client."""
+    return TelegramClient()
+
+
 @router.get("/auth")
 async def begin_google_auth(
     user_id: int = Query(..., description="User ID"),
@@ -73,6 +78,7 @@ async def google_oauth_callback(
     state: str = Query(..., description="State token"),
     error: str | None = Query(None, description="OAuth error from Google"),
     settings: Settings = Depends(get_settings),
+    telegram_client: TelegramClient = Depends(get_telegram_client),
 ):
     """
     Handle Google OAuth2 callback.
@@ -102,12 +108,10 @@ async def google_oauth_callback(
         await client.exchange_code(code)
 
         # Notify the user via Telegram that authentication succeeded
-
         user_service = get_user_service()
         user = await user_service.get_user_by_id(user_id)
         if user and user.telegram_chat_id:
             try:
-                telegram_client = TelegramClient()
                 await telegram_client.send_message(
                     chat_id=user.telegram_chat_id,
                     text="✅ Google authentication successful!",

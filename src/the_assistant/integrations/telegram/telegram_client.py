@@ -203,9 +203,13 @@ class TelegramClient:
             update: The update object from Telegram.
             context: The context object from Telegram.
         """
+        if not update.message or not update.effective_user:
+            logger.warning("Received unknown command without message or effective_user")
+            return
+
         # Extract the command from the message
-        command = update.message.text.split()[0] if update.message.text else ""  # type: ignore
-        user_id = update.effective_user.id  # type: ignore
+        command = update.message.text.split()[0] if update.message.text else ""
+        user_id = update.effective_user.id
 
         # Get available commands for suggestions
         available_commands = list(self._command_handlers.keys())
@@ -223,7 +227,7 @@ class TelegramClient:
         error_message += "\nUse /help for more detailed information about each command."
 
         # Send the error message
-        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
+        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -295,27 +299,31 @@ async def handle_start_command(
         update: The update object from Telegram.
         context: The context object from Telegram.
     """
+    if not update.message or not update.effective_user:
+        logger.warning("Received start command without message or effective_user")
+        return
+
     user = update.effective_user
     user_service = get_user_service()
 
-    existing = await user_service.get_user_by_telegram_chat_id(user.id)  # type: ignore[arg-type]
+    existing = await user_service.get_user_by_telegram_chat_id(user.id)
     if existing is None:
         existing = await user_service.create_user(
-            telegram_chat_id=user.id,  # type: ignore[arg-type]
-            username=user.username,  # type: ignore[arg-type]
-            first_name=user.first_name,  # type: ignore[arg-type]
-            last_name=user.last_name,  # type: ignore[arg-type]
+            telegram_chat_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
             registered_at=datetime.now(UTC),
         )
     else:
         existing = await user_service.update_user(
             existing.id,
-            username=user.username or existing.username,  # type: ignore[arg-type]
-            first_name=user.first_name or existing.first_name,  # type: ignore[arg-type]
-            last_name=user.last_name or existing.last_name,  # type: ignore[arg-type]
+            username=user.username or existing.username,
+            first_name=user.first_name or existing.first_name,
+            last_name=user.last_name or existing.last_name,
         )
 
-    user_name = user.first_name or user.username or "there"  # type: ignore
+    user_name = user.first_name or user.username or "there"
     welcome_message = (
         f"👋 Hello, {user_name}!\n\n"
         "Welcome to The Assistant Bot. I can help you stay informed about your "
@@ -324,12 +332,12 @@ async def handle_start_command(
         "• Send notifications about upcoming trips\n"
         "• Provide morning briefings with your schedule and tasks\n"
         "• Respond to your commands for on-demand information\n\n"
-        f"✅ You've been registered with ID: `{user.id}`\n\n"  # type: ignore
+        f"✅ You've been registered with ID: `{user.id}`\n\n"
         "Use /help to see all available commands or /settings to manage your preferences."
     )
 
-    await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
-    logger.info(f"Registered and sent welcome message to user {user.id}")  # type: ignore
+    await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)
+    logger.info(f"Registered and sent welcome message to user {user.id}")
 
 
 async def handle_help_command(
@@ -343,6 +351,10 @@ async def handle_help_command(
         update: The update object from Telegram.
         context: The context object from Telegram.
     """
+    if not update.message or not update.effective_user:
+        logger.warning("Received help command without message or effective_user")
+        return
+
     help_message = (
         "📚 **Available Commands**\n\n"
         "/start - Start the bot and get a welcome message\n"
@@ -355,8 +367,8 @@ async def handle_help_command(
         "If you have any issues or questions, please contact your system administrator."
     )
 
-    await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
-    logger.info(f"Sent help message to user {update.effective_user.id}")  # type: ignore
+    await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
+    logger.info(f"Sent help message to user {update.effective_user.id}")
 
 
 async def handle_briefing_command(
@@ -370,13 +382,18 @@ async def handle_briefing_command(
         update: The update object from Telegram.
         context: The context object from Telegram.
     """
-    user_id = update.effective_user.id  # type: ignore
-    # Get chat_id for logging purposes
-    chat_id = update.effective_chat.id  # type: ignore
+    if not update.message or not update.effective_user or not update.effective_chat:
+        logger.warning(
+            "Received briefing command without message, effective_user, or effective_chat"
+        )
+        return
+
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
     logger.debug(f"Briefing requested in chat {chat_id}")
 
     # Send an acknowledgment message
-    await update.message.reply_text(  # type: ignore
+    await update.message.reply_text(
         "🔄 Generating your briefing... This may take a moment."
     )
     logger.info(f"Received briefing request from user {user_id}")
@@ -394,12 +411,12 @@ async def handle_briefing_command(
             "integrated with the workflow system."
         )
 
-        await update.message.reply_text(briefing_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
+        await update.message.reply_text(briefing_message, parse_mode=ParseMode.MARKDOWN)
         logger.info(f"Sent briefing explanation to user {user_id}")
 
     except Exception as e:
         error_message = "Sorry, I encountered an error while generating your briefing. Please try again later."
-        await update.message.reply_text(error_message)  # type: ignore
+        await update.message.reply_text(error_message)
         logger.error(f"Error generating briefing for user {user_id}: {e}")
 
 
@@ -414,16 +431,20 @@ async def handle_settings_command(
         update: The update object from Telegram.
         context: The context object from Telegram.
     """
-    user_id = update.effective_user.id  # type: ignore
+    if not update.message or not update.effective_user:
+        logger.warning("Received settings command without message or effective_user")
+        return
+
+    user_id = update.effective_user.id
     user_service = get_user_service()
 
     user = await user_service.get_user_by_telegram_chat_id(user_id)
     if not user:
         user = await user_service.create_user(
             telegram_chat_id=user_id,
-            username=update.effective_user.username,  # type: ignore[arg-type]
-            first_name=update.effective_user.first_name,  # type: ignore[arg-type]
-            last_name=update.effective_user.last_name,  # type: ignore[arg-type]
+            username=update.effective_user.username,
+            first_name=update.effective_user.first_name,
+            last_name=update.effective_user.last_name,
             registered_at=datetime.now(UTC),
         )
 
@@ -436,7 +457,7 @@ async def handle_settings_command(
         f"**Registered:** {user.registered_at or 'Unknown'}\n"
     )
 
-    await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
+    await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)
     logger.info(f"Sent settings to user {user_id}")
 
 
@@ -449,13 +470,18 @@ async def handle_google_auth_command(
     authenticated. When the OAuth flow completes the user will receive a
     confirmation message.
     """
-
-    chat_user = update.effective_user
-    if not chat_user or not update.message:
-        logger.warning("google_auth command received without effective_user or message")
+    if not update.message:
+        logger.warning("Received google_auth command without message")
         return
 
-    user = await user_service.get_user_by_telegram_chat_id(chat_user.id)  # type: ignore[arg-type]
+    chat_user = update.effective_user
+    if not chat_user:
+        logger.warning("Received google_auth command without effective_user")
+        return
+
+    user_service = get_user_service()
+
+    user = await user_service.get_user_by_telegram_chat_id(chat_user.id)
     if not user:
         raise ValueError("User not registered")
 
@@ -463,7 +489,7 @@ async def handle_google_auth_command(
     if await client.is_authenticated():
         await update.message.reply_text(
             "✅ You are already authenticated with Google.",
-        )  # type: ignore
+        )
         return
 
     settings = get_settings()
@@ -474,8 +500,8 @@ async def handle_google_auth_command(
         f"Please [authorize access]({auth_url}) to your Google account. "
         "You'll receive a confirmation once completed."
     )
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)  # type: ignore
-    logger.info(f"Sent Google auth link to user {chat_user.id}")  # type: ignore[arg-type]
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    logger.info(f"Sent Google auth link to user {chat_user.id}")
 
 
 async def create_telegram_client() -> TelegramClient:
