@@ -243,7 +243,7 @@ Monitors Google Calendar for French lesson events and sends preparation reminder
 Summarizes today's and tomorrow's events along with the local weather forecast and a list of recent unread emails.
 
 **Trigger**: Scheduled (morning) or manual
-**Content**: Weather, events for today and tomorrow, top unread emails and tasks
+**Content**: Weather, events for today and tomorrow, top unread emails
 
 ## Development
 
