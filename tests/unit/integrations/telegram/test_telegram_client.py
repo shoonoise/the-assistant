@@ -14,10 +14,13 @@ from telegram.error import (
     TelegramError,
 )
 
+from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
     handle_briefing_command,
     handle_google_auth_command,
+    save_setting,
+    start_update_settings,
 )
 
 
@@ -496,3 +499,70 @@ class TestTelegramClient:
         calls = mock_update.message.reply_text.call_args_list
         assert "Generating your briefing" in calls[0][0][0]
         assert "encountered an error" in calls[1][0][0]
+
+
+class TestUpdateSettings:
+    """Tests for the settings update conversation."""
+
+    @pytest.mark.asyncio
+    async def test_start_update_settings(self, mock_update, mock_context):
+        await start_update_settings(mock_update, mock_context)
+        mock_update.message.reply_text.assert_called_once()
+        args, _ = mock_update.message.reply_text.call_args
+        assert "choose which setting" in args[0]
+
+    @pytest.mark.asyncio
+    async def test_save_setting_trim_and_default(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.user_data = {
+                "setting_key": SettingKey.GREET,
+                "setting_label": "How to greet",
+            }
+            mock_update.message.text = "  Hello  "
+            await save_setting(mock_update, mock_context)
+
+        user_service.set_setting.assert_awaited_once_with(1, "greet", "Hello")
+        assert mock_update.message.reply_text.called
+
+    @pytest.mark.asyncio
+    async def test_save_setting_empty_default(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.user_data = {
+                "setting_key": SettingKey.GREET,
+                "setting_label": "How to greet",
+            }
+            mock_update.message.text = ""
+            await save_setting(mock_update, mock_context)
+
+        user_service.set_setting.assert_awaited_once_with(1, "greet", "first_name")
+
+    @pytest.mark.asyncio
+    async def test_save_setting_user_not_registered(self, mock_update, mock_context):
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.user_data = {
+                "setting_key": SettingKey.GREET,
+                "setting_label": "How to greet",
+            }
+            mock_update.message.text = "Hi"
+            with pytest.raises(ValueError):
+                await save_setting(mock_update, mock_context)
