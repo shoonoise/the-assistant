@@ -47,9 +47,6 @@ class Settings(BaseSettings):
         env="DATABASE_URL",
     )
     db_encryption_key: str = Field(..., env="DB_ENCRYPTION_KEY")
-    user_registry_path: Path = Field(
-        Path("user_registry.json"), env="USER_REGISTRY_PATH"
-    )
 
     # Security
     jwt_secret: str = Field(..., env="JWT_SECRET")
@@ -60,7 +57,6 @@ class Settings(BaseSettings):
         "google_credentials_path",
         "google_token_path",
         "obsidian_vault_path",
-        "user_registry_path",
         mode="before",
     )
     @classmethod

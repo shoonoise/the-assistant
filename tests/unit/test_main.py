@@ -105,11 +105,6 @@ class TestMainApp:
         # but we should have some Google OAuth related routes
         assert any("/google" in route for route in routes)
 
-    def test_user_settings_router_included(self):
-        """Test that the user settings router is included."""
-        routes = [route.path for route in app.routes]
-        assert any(route.startswith("/settings") for route in routes)
-
     def test_app_has_correct_metadata(self):
         """Test that the app has correct metadata."""
         assert hasattr(app, "title")

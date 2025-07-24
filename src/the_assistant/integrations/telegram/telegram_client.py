@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 from telegram import Bot, Update
 from telegram.constants import ParseMode
@@ -23,8 +24,8 @@ from telegram.ext import (
     filters,
 )
 
+from the_assistant.db import get_user_service
 from the_assistant.settings import get_settings
-from the_assistant.utils.user_registry import get_user_registry
 
 logger = logging.getLogger(__name__)
 
@@ -293,15 +294,24 @@ async def handle_start_command(
         context: The context object from Telegram.
     """
     user = update.effective_user
-    user_registry = get_user_registry()
+    user_service = get_user_service()
 
-    # Register or update user in the registry
-    user_registry.register_user(
-        telegram_id=user.id,  # type: ignore
-        username=user.username,  # type: ignore
-        first_name=user.first_name,  # type: ignore
-        last_name=user.last_name,  # type: ignore
-    )
+    existing = await user_service.get_user_by_telegram_chat_id(user.id)  # type: ignore[arg-type]
+    if existing is None:
+        existing = await user_service.create_user(
+            telegram_chat_id=user.id,  # type: ignore[arg-type]
+            username=user.username,  # type: ignore[arg-type]
+            first_name=user.first_name,  # type: ignore[arg-type]
+            last_name=user.last_name,  # type: ignore[arg-type]
+            registered_at=datetime.now(UTC),
+        )
+    else:
+        existing = await user_service.update_user(
+            existing.id,
+            username=user.username or existing.username,  # type: ignore[arg-type]
+            first_name=user.first_name or existing.first_name,  # type: ignore[arg-type]
+            last_name=user.last_name or existing.last_name,  # type: ignore[arg-type]
+        )
 
     user_name = user.first_name or user.username or "there"  # type: ignore
     welcome_message = (
@@ -403,36 +413,25 @@ async def handle_settings_command(
         context: The context object from Telegram.
     """
     user_id = update.effective_user.id  # type: ignore
-    user_registry = get_user_registry()
+    user_service = get_user_service()
 
-    # Get or register the user
-    user_profile = user_registry.get_user(user_id)
-    if not user_profile:
-        user_profile = user_registry.register_user(
-            telegram_id=user_id,
-            username=update.effective_user.username,  # type: ignore
-            first_name=update.effective_user.first_name,  # type: ignore
-            last_name=update.effective_user.last_name,  # type: ignore
+    user = await user_service.get_user_by_telegram_chat_id(user_id)
+    if not user:
+        user = await user_service.create_user(
+            telegram_chat_id=user_id,
+            username=update.effective_user.username,  # type: ignore[arg-type]
+            first_name=update.effective_user.first_name,  # type: ignore[arg-type]
+            last_name=update.effective_user.last_name,  # type: ignore[arg-type]
+            registered_at=datetime.now(UTC),
         )
 
     # Create settings message
     settings_message = (
         f"⚙️ **Your Settings**\n\n"
-        f"**User ID:** `{user_profile.telegram_id}`\n"
-        f"**Name:** {user_profile.first_name or 'Not set'}\n"
-        f"**Username:** @{user_profile.username or 'Not set'}\n"
-        f"**Registered:** {user_profile.registered_at or 'Unknown'}\n\n"
-        f"**Notification Preferences:**\n"
-        f"• Morning Briefing: {'✅ Enabled' if user_profile.morning_briefing_enabled else '❌ Disabled'}\n"
-        f"• Trip Notifications: {'✅ Enabled' if user_profile.trip_notifications_enabled else '❌ Disabled'}\n"
-        f"• Preferred Briefing Time: {user_profile.preferred_briefing_time}\n"
-        f"• Timezone: {user_profile.timezone}\n\n"
-        f"**Available Commands:**\n"
-        f"• `/settings_briefing on/off` - Toggle morning briefings\n"
-        f"• `/settings_trips on/off` - Toggle trip notifications\n"
-        f"• `/settings_time HH:MM` - Set briefing time (24h format)\n"
-        f"• `/settings_timezone TIMEZONE` - Set your timezone\n\n"
-        f"Example: `/settings_briefing off` to disable morning briefings"
+        f"**User ID:** `{user.id}`\n"
+        f"**Name:** {user.first_name or 'Not set'}\n"
+        f"**Username:** @{user.username or 'Not set'}\n"
+        f"**Registered:** {user.registered_at or 'Unknown'}\n"
     )
 
     await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)  # type: ignore

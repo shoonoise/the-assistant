@@ -105,8 +105,7 @@ class TestGoogleClient:
         assert client.user_id == 1
         assert client.settings == self.mock_settings
         self.mock_store_class.assert_called_once_with(
-            database_url=self.mock_settings.database_url,
-            encryption_key=self.mock_settings.db_encryption_key,
+            encryption_key=self.mock_settings.db_encryption_key
         )
         assert client.credential_store == self.mock_store_instance
         assert client.credentials_path == self.mock_settings.google_credentials_path

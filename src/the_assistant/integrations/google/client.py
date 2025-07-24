@@ -65,8 +65,7 @@ class GoogleClient:
         self.settings = get_settings()
 
         self.credential_store = PostgresCredentialStore(
-            database_url=self.settings.database_url,
-            encryption_key=self.settings.db_encryption_key,
+            encryption_key=self.settings.db_encryption_key
         )
         self.credentials_path = self.settings.google_credentials_path
         self.scopes = self.settings.google_oauth_scopes

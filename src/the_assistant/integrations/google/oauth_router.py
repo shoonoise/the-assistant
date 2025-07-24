@@ -22,7 +22,7 @@ def get_credential_store(
     settings: Settings = Depends(get_settings),
 ) -> PostgresCredentialStore:
     """Dependency to get credential store."""
-    return PostgresCredentialStore(settings.database_url, settings.db_encryption_key)
+    return PostgresCredentialStore(encryption_key=settings.db_encryption_key)
 
 
 def get_google_client(
