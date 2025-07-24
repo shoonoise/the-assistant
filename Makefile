@@ -63,33 +63,9 @@ test-integration: ## Run only integration tests
 	@echo "$(BLUE)🧪 Running integration tests...$(RESET)"
 	uv run pytest tests/integration/ -v
 
-test-obsidian: ## Run only Obsidian-specific tests
-	@echo "$(BLUE)🧪 Running Obsidian tests...$(RESET)"
-	uv run pytest -v -m "obsidian"
-
-test-google: ## Run only Google API tests
-	@echo "$(BLUE)🧪 Running Google API tests...$(RESET)"
-	uv run pytest -v -m "google"
-
-test-workflows: ## Run only workflow tests
-	@echo "$(BLUE)🧪 Running workflow tests...$(RESET)"
-	uv run pytest -v -m "workflows"
-
-test-fast: ## Run only fast tests (exclude slow)
-	@echo "$(BLUE)🧪 Running fast tests...$(RESET)"
-	uv run pytest -v -m "not slow"
-
 test-cov: ## Run tests with coverage
 	@echo "$(BLUE)🧪 Running tests with coverage...$(RESET)"
 	uv run pytest -v --cov=src --cov-report=term-missing
-
-test-unit-cov: ## Run unit tests with coverage
-	@echo "$(BLUE)🧪 Running unit tests with coverage...$(RESET)"
-	uv run pytest tests/unit/ -v --cov=src --cov-report=term-missing
-
-test-integration-cov: ## Run integration tests with coverage
-	@echo "$(BLUE)🧪 Running integration tests with coverage...$(RESET)"
-	uv run pytest tests/integration/ -v --cov=src --cov-report=term-missing
 
 check: format-check lint-src-check typecheck test ## Run all checks (CI mode)
 	@echo "$(GREEN)✅ All checks passed!$(RESET)"
