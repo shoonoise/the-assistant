@@ -3,10 +3,12 @@
 # Import all activities for easy access
 from .google_activities import (
     get_calendar_events,
+    get_emails,
     get_events_by_date,
     get_today_events,
     get_upcoming_events,
 )
+from .messages_activities import build_daily_briefing
 from .obsidian_activities import (
     scan_vault_notes,
 )
@@ -22,6 +24,7 @@ __all__ = [
     "get_events_by_date",
     "get_today_events",
     "get_upcoming_events",
+    "get_emails",
     # Obsidian activities
     "scan_vault_notes",
     # Weather activities

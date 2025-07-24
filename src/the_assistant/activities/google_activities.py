@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from temporalio import activity
 
 from the_assistant.integrations.google.client import GoogleClient
-from the_assistant.models.google import CalendarEvent
+from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,14 @@ class GetEventsByDateInput:
 class GetTodayEventsInput:
     user_id: int
     calendar_id: str = "primary"
+
+
+@dataclass
+class GetEmailsInput:
+    user_id: int
+    unread_only: bool = True
+    sender: str | None = None
+    max_results: int = 5
 
 
 def get_google_client(user_id: int) -> GoogleClient:
@@ -184,3 +192,23 @@ async def get_today_events(input: GetTodayEventsInput) -> list[CalendarEvent]:
             user_id=input.user_id, target_date=today, calendar_id=input.calendar_id
         )
     )
+
+
+@activity.defn
+async def get_emails(input: GetEmailsInput) -> list[GmailMessage]:
+    """Retrieve Gmail messages."""
+    logger.info(f"Fetching emails for user {input.user_id}")
+
+    client = get_google_client(input.user_id)
+
+    if not await client.is_authenticated():
+        raise ValueError(f"User {input.user_id} is not authenticated with Google")
+
+    emails = await client.get_emails(
+        unread_only=input.unread_only,
+        sender=input.sender,
+        max_results=input.max_results,
+    )
+
+    logger.info(f"Retrieved {len(emails)} emails")
+    return emails

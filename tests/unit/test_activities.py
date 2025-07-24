@@ -7,21 +7,27 @@ import pytest
 
 from the_assistant.activities.google_activities import (
     GetCalendarEventsInput,
+    GetEmailsInput,
     GetEventsByDateInput,
     GetTodayEventsInput,
     GetUpcomingEventsInput,
     get_calendar_events,
+    get_emails,
     get_events_by_date,
     get_google_client,
     get_today_events,
     get_upcoming_events,
+)
+from the_assistant.activities.messages_activities import (
+    DailyBriefingInput,
+    build_daily_briefing,
 )
 from the_assistant.activities.obsidian_activities import scan_vault_notes
 from the_assistant.activities.weather_activities import (
     GetWeatherForecastInput,
     get_weather_forecast,
 )
-from the_assistant.models.google import CalendarEvent
+from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.weather import WeatherForecast
 
 
@@ -239,8 +245,11 @@ class TestWeatherActivities:
     """Test weather forecast activities."""
 
     @pytest.mark.asyncio
+    @patch("the_assistant.activities.weather_activities.get_user_service")
     @patch("the_assistant.activities.weather_activities.WeatherClient")
-    async def test_get_weather_forecast_success(self, mock_client_class):
+    async def test_get_weather_forecast_success(
+        self, mock_client_class, mock_get_service
+    ):
         mock_client = AsyncMock()
         forecast = WeatherForecast(
             location="Paris",
@@ -252,8 +261,135 @@ class TestWeatherActivities:
         mock_client.get_forecast.return_value = [forecast]
         mock_client_class.return_value = mock_client
 
-        input_data = GetWeatherForecastInput(location="Paris")
+        mock_service = AsyncMock()
+        mock_service.get_setting.return_value = "Paris"
+        mock_get_service.return_value = mock_service
+
+        input_data = GetWeatherForecastInput(user_id=1)
         result = await get_weather_forecast(input_data)
 
         assert result == [forecast]
-        mock_client.get_forecast.assert_called_once_with("Paris", days=1)
+        mock_service.get_setting.assert_awaited_once_with(1, "location")
+        mock_client.get_forecast.assert_awaited_once_with("Paris", days=1)
+
+    @pytest.mark.asyncio
+    @patch("the_assistant.activities.weather_activities.get_user_service")
+    @patch("the_assistant.activities.weather_activities.WeatherClient")
+    async def test_get_weather_forecast_no_location(
+        self, mock_client_class, mock_get_service
+    ):
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+
+        mock_service = AsyncMock()
+        mock_service.get_setting.return_value = None
+        mock_get_service.return_value = mock_service
+
+        input_data = GetWeatherForecastInput(user_id=1)
+        result = await get_weather_forecast(input_data)
+
+        assert result == []
+        mock_service.get_setting.assert_awaited_once_with(1, "location")
+        mock_client.get_forecast.assert_not_called()
+
+
+class TestEmailActivities:
+    """Test Gmail-related activities."""
+
+    @pytest.fixture
+    def mock_google_client(self):
+        client = AsyncMock()
+        client.is_authenticated.return_value = True
+        client.get_emails.return_value = []
+        return client
+
+    @pytest.fixture
+    def sample_emails(self):
+        return [
+            GmailMessage(
+                id="m1",
+                thread_id="t1",
+                snippet="hi",
+                subject="Hello",
+                sender="sender@example.com",
+            )
+        ]
+
+    @pytest.mark.asyncio
+    @patch("the_assistant.activities.google_activities.get_google_client")
+    async def test_get_emails_success(
+        self, mock_get_client, mock_google_client, sample_emails
+    ):
+        mock_get_client.return_value = mock_google_client
+        mock_google_client.get_emails.return_value = sample_emails
+
+        input_data = GetEmailsInput(user_id=1, unread_only=True, max_results=5)
+        result = await get_emails(input_data)
+
+        assert result == sample_emails
+        mock_google_client.is_authenticated.assert_called_once()
+        mock_google_client.get_emails.assert_called_once_with(
+            unread_only=True, sender=None, max_results=5
+        )
+
+    @pytest.mark.asyncio
+    @patch("the_assistant.activities.google_activities.get_google_client")
+    async def test_get_emails_not_authenticated(
+        self, mock_get_client, mock_google_client
+    ):
+        mock_get_client.return_value = mock_google_client
+        mock_google_client.is_authenticated.return_value = False
+
+        input_data = GetEmailsInput(user_id=1)
+        with pytest.raises(ValueError, match="User 1 is not authenticated with Google"):
+            await get_emails(input_data)
+
+
+class TestMessagesActivities:
+    """Test message building helpers."""
+
+    @pytest.mark.asyncio
+    async def test_build_daily_briefing(self):
+        today = datetime.now(UTC)
+        tomorrow = today + timedelta(days=1)
+        event_today = CalendarEvent(
+            id="1",
+            summary="Today Event",
+            start_time=today,
+            end_time=today,
+        )
+        event_tomorrow = CalendarEvent(
+            id="2",
+            summary="Tomorrow Event",
+            start_time=tomorrow,
+            end_time=tomorrow,
+        )
+        forecast = WeatherForecast(
+            location="Berlin",
+            forecast_date=date.today(),
+            weather_code=1,
+            temperature_max=25,
+            temperature_min=15,
+        )
+        email = GmailMessage(
+            id="m1",
+            thread_id="t1",
+            snippet="snippet",
+            subject="Subject",
+            sender="sender@example.com",
+        )
+
+        text = await build_daily_briefing(
+            DailyBriefingInput(
+                user_id=1,
+                today_events=[event_today],
+                tomorrow_events=[event_tomorrow],
+                weather=forecast,
+                emails=[email],
+            )
+        )
+
+        assert "Today's Events" in text
+        assert "Tomorrow's Events" in text
+        assert "Weather" in text
+        assert "Unread Emails" in text
