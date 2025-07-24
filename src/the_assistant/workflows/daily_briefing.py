@@ -14,7 +14,9 @@ with workflow.unsafe.imports_passed_through():
         get_today_events,
     )
     from the_assistant.activities.messages_activities import (
+        BriefingSummaryInput,
         DailyBriefingInput,
+        build_briefing_summary,
         build_daily_briefing,
     )
     from the_assistant.activities.telegram_activities import (
@@ -68,8 +70,14 @@ class DailyBriefing:
             start_to_close_timeout=timedelta(seconds=10),
         )
 
+        briefing_sammary = await workflow.execute_activity(
+            build_briefing_summary,
+            BriefingSummaryInput(user_id=user_id, data=briefing),
+            start_to_close_timeout=timedelta(30),
+        )
+
         await workflow.execute_activity(
             send_message,
-            SendMessageInput(user_id=user_id, text=briefing),
+            SendMessageInput(user_id=user_id, text=briefing_sammary),
             start_to_close_timeout=timedelta(seconds=10),
         )

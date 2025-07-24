@@ -33,11 +33,6 @@ class Settings(BaseSettings):
         ]
     )
 
-    # Weather
-    weather_location: str | None = Field(
-        None, env="WEATHER_LOCATION", description="Default location for forecast"
-    )
-
     # Obsidian
     obsidian_vault_path: Path | None = Field(Path("/vault"), env="OBSIDIAN_VAULT_PATH")
 
@@ -55,6 +50,14 @@ class Settings(BaseSettings):
 
     # Security
     jwt_secret: str = Field(..., env="JWT_SECRET")
+
+    # Observability
+    langsmith_tracing: bool = Field(False, env="LANGSMITH_TRACING")
+    langsmith_endpoint: str = Field(
+        "https://api.smith.langchain.com", env="LANGSMITH_ENDPOINT"
+    )
+    langsmith_api_key: str | None = Field(None, env="LANGSMITH_API_KEY")
+    langsmith_project: str | None = Field(None, env="LANGSMITH_PROJECT")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

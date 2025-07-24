@@ -4,6 +4,7 @@ from datetime import date
 
 from temporalio import activity
 
+from the_assistant.integrations.llm import LLMAgent, Task
 from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.weather import WeatherForecast
 
@@ -57,3 +58,23 @@ async def build_daily_briefing(input: DailyBriefingInput) -> str:
     logger.info(f"Built daily briefing message: {template}\nlenght: {len(template)}")
 
     return template[:4000]
+
+
+@dataclass
+class BriefingSummaryInput:
+    """Input for building LLM-based morning briefing summary."""
+
+    user_id: int
+    data: str
+
+
+@activity.defn
+async def build_briefing_summary(input: BriefingSummaryInput) -> str:
+    """Use the LLM agent to create a morning briefing summary."""
+
+    agent = LLMAgent()
+    task = Task(
+        prompt="You need to build a morning brief message for user, this is data: {data}",
+        data=input.data,
+    )
+    return await agent.run(task)

@@ -8,7 +8,10 @@ from .google_activities import (
     get_today_events,
     get_upcoming_events,
 )
-from .messages_activities import build_daily_briefing
+from .messages_activities import (
+    build_briefing_summary,
+    build_daily_briefing,
+)
 from .obsidian_activities import (
     scan_vault_notes,
 )
@@ -31,6 +34,7 @@ __all__ = [
     "get_weather_forecast",
     # Telegram activities
     "build_daily_briefing",
+    "build_briefing_summary",
     "send_formatted_message",
     "send_message",
 ]

@@ -20,7 +20,10 @@ from the_assistant.activities.google_activities import (
     get_today_events,
     get_upcoming_events,
 )
-from the_assistant.activities.messages_activities import build_daily_briefing
+from the_assistant.activities.messages_activities import (
+    build_briefing_summary,
+    build_daily_briefing,
+)
 from the_assistant.activities.obsidian_activities import (
     scan_vault_notes,
 )
@@ -70,6 +73,7 @@ async def run_worker() -> None:
                 get_weather_forecast,
                 # Messages activities
                 build_daily_briefing,
+                build_briefing_summary,
                 # Telegram activities
                 send_message,
             ],
