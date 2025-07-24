@@ -923,6 +923,7 @@ dependencies = [
     { name = "google-auth" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
+    { name = "greenlet" },
     { name = "httpx" },
     { name = "marko" },
     { name = "psycopg2-binary" },
@@ -942,6 +943,7 @@ dependencies = [
 dev = [
     { name = "aiosqlite" },
     { name = "build" },
+    { name = "greenlet" },
     { name = "lefthook" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -959,6 +961,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.0.0" },
     { name = "google-auth-httplib2", specifier = ">=0.2.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.0.0" },
+    { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "marko", specifier = ">=2.0.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
@@ -978,6 +981,7 @@ requires-dist = [
 dev = [
     { name = "aiosqlite", specifier = ">=0.21.0" },
     { name = "build", specifier = ">=1.2.2.post1" },
+    { name = "greenlet", specifier = ">=3.0.0" },
     { name = "lefthook", specifier = ">=1.12.2" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
