@@ -54,6 +54,7 @@ class GoogleClient:
     def __init__(
         self,
         user_id: int,
+        redirect_uri: str | None = None,
     ):
         """
         Initialize the Google client.
@@ -69,20 +70,18 @@ class GoogleClient:
         )
         self.credentials_path = self.settings.google_credentials_path
         self.scopes = self.settings.google_oauth_scopes
+        self.redirect_uri = redirect_uri or self.settings.google_oauth_redirect_uri
 
         self._credentials: Credentials | None = None
         self._calendar_service: Any = None
         self._gmail_service: Any = None
         self._oauth_flow: InstalledAppFlow | None = None
 
-    async def generate_auth_url(
-        self, redirect_uri: str, state: str | None = None
-    ) -> str:
+    async def generate_auth_url(self, state: str | None = None) -> str:
         """
         Generate OAuth2 authorization URL for web-based flow.
 
         Args:
-            redirect_uri: URI where Google will redirect after consent
             state: Optional state parameter for CSRF protection
 
         Returns:
@@ -95,7 +94,7 @@ class GoogleClient:
             )
 
             # Set the redirect URI
-            self._oauth_flow.redirect_uri = redirect_uri
+            self._oauth_flow.redirect_uri = self.redirect_uri
 
             # Generate authorization URL
             auth_url, _ = self._oauth_flow.authorization_url(
@@ -111,13 +110,12 @@ class GoogleClient:
             logger.error(f"Failed to generate auth URL: {e}")
             raise GoogleAuthError(f"Failed to generate auth URL: {e}") from e
 
-    async def exchange_code(self, code: str, redirect_uri: str) -> None:
+    async def exchange_code(self, code: str) -> None:
         """
         Exchange authorization code for credentials and store them.
 
         Args:
             code: Authorization code from Google
-            redirect_uri: Must match the one used in generate_auth_url
         """
         try:
             # Use the same flow instance that was used to generate the auth URL
@@ -126,7 +124,7 @@ class GoogleClient:
                 self._oauth_flow = InstalledAppFlow.from_client_secrets_file(
                     str(self.credentials_path), self.scopes
                 )
-                self._oauth_flow.redirect_uri = redirect_uri
+                self._oauth_flow.redirect_uri = self.redirect_uri
 
             # Exchange code for credentials
             self._oauth_flow.fetch_token(code=code)

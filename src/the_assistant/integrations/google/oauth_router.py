@@ -3,15 +3,16 @@ FastAPI router for Google OAuth2 endpoints.
 """
 
 import logging
-from datetime import UTC, datetime, timedelta
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
+from ...db import get_user_service
 from ...settings import Settings, get_settings
+from ..telegram.telegram_client import TelegramClient
 from .client import GoogleAuthError, GoogleClient
 from .credential_store import PostgresCredentialStore
+from .oauth_state import create_state_jwt, parse_state_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -32,27 +33,9 @@ def get_google_client(
     return GoogleClient(user_id=user_id)
 
 
-def create_state_jwt(user_id: int, settings: Settings) -> str:
-    """Create a JWT state token for OAuth2 flow."""
-    payload = {
-        "user_id": user_id,
-        "exp": datetime.now(UTC) + timedelta(minutes=10),  # 10 min expiry
-        "iat": datetime.now(UTC),
-    }
-    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
-
-
-def parse_state_jwt(state: str, settings: Settings) -> int | None:
-    """Parse and validate JWT state token."""
-    try:
-        payload = jwt.decode(state, settings.jwt_secret, algorithms=["HS256"])
-        return payload.get("user_id")
-    except jwt.ExpiredSignatureError:
-        logger.warning("State token expired")
-        return None
-    except jwt.InvalidTokenError:
-        logger.warning("Invalid state token")
-        return None
+def get_telegram_client() -> TelegramClient:
+    """Dependency to get Telegram client."""
+    return TelegramClient()
 
 
 @router.get("/auth")
@@ -72,9 +55,8 @@ async def begin_google_auth(
             return {"message": "User already authenticated", "authenticated": True}
 
         # Generate authorization URL with state
-        redirect_uri = settings.google_oauth_redirect_uri
         state = create_state_jwt(user_id, settings)
-        auth_url = await client.generate_auth_url(redirect_uri, state)
+        auth_url = await client.generate_auth_url(state)
 
         return {
             "auth_url": auth_url,
@@ -96,6 +78,7 @@ async def google_oauth_callback(
     state: str = Query(..., description="State token"),
     error: str | None = Query(None, description="OAuth error from Google"),
     settings: Settings = Depends(get_settings),
+    telegram_client: TelegramClient = Depends(get_telegram_client),
 ):
     """
     Handle Google OAuth2 callback.
@@ -122,8 +105,21 @@ async def google_oauth_callback(
         client = GoogleClient(user_id=user_id)
 
         # Exchange code for credentials
-        redirect_uri = settings.google_oauth_redirect_uri
-        await client.exchange_code(code, redirect_uri)
+        await client.exchange_code(code)
+
+        # Notify the user via Telegram that authentication succeeded
+        user_service = get_user_service()
+        user = await user_service.get_user_by_id(user_id)
+        if user and user.telegram_chat_id:
+            try:
+                await telegram_client.send_message(
+                    chat_id=user.telegram_chat_id,
+                    text="✅ Google authentication successful!",
+                )
+            except Exception as notify_err:  # pragma: no cover - log only
+                logger.error(
+                    f"Failed to send Telegram notification for user {user_id}: {notify_err}"
+                )
 
         logger.info(f"Successfully authenticated user {user_id}")
 

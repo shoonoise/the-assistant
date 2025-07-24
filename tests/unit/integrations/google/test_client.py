@@ -160,9 +160,7 @@ class TestGoogleClient:
 
         client = GoogleClient(user_id=1)
 
-        auth_url = await client.generate_auth_url(
-            "http://localhost:8080/callback", "test_state"
-        )
+        auth_url = await client.generate_auth_url("test_state")
 
         assert auth_url == "https://auth.url"
         mock_flow.authorization_url.assert_called_once_with(
@@ -189,7 +187,7 @@ class TestGoogleClient:
         # We manually set it here for isolated testing
         client._oauth_flow = mock_flow
 
-        await client.exchange_code("auth_code", "http://localhost:8080/callback")
+        await client.exchange_code("auth_code")
 
         mock_flow.fetch_token.assert_called_once_with(code="auth_code")
         self.mock_store_instance.save.assert_called_once_with(1, mock_credentials)
