@@ -2,69 +2,129 @@
 inclusion: always
 ---
 
-# The Assistant - Development Guidelines
+# The Assistant - AI Development Guidelines
 
-Personal workflow automation using Temporal orchestration with Google Calendar, Obsidian, and Telegram integrations.
+Personal workflow automation system using Temporal orchestration with Google Calendar, Obsidian, and Telegram integrations.
 
-## Execution Requirements
+## Critical Execution Rules
 
-**Python Environment:**
-- ALWAYS use `uv run python ...` (never bare `python` commands)
-- Python 3.13+ with built-in types (`dict`, `list`, `tuple`)
-- Type hints required on all function signatures
-- snake_case naming for files, functions, variables
+**Python Environment (MANDATORY):**
+- ALWAYS use `uv run python ...` - never bare `python` commands
+- Python 3.13+ with built-in types (`dict`, `list`, `tuple`) - no `typing` imports needed
+- Type hints REQUIRED on ALL function signatures and return types
+- snake_case naming for files, functions, variables (never camelCase)
 
-**Package Structure:**
+**Package Structure (STRICT):**
 - `src/the_assistant/` - main package using src layout
-- `workflows/` - Temporal workflows (business logic orchestration)
+- `workflows/` - Temporal workflows (orchestrate business logic)
 - `activities/` - Temporal activities (atomic external operations)
 - `integrations/` - external API client wrappers
+- `models/` - Pydantic data models
+- `db/` - database operations
 
-## Architecture Rules
+## Temporal Architecture (CORE PATTERNS)
 
-**Temporal Patterns:**
-- Workflows: long-running, stateful orchestration
-- Activities: idempotent, retryable external operations
-- One workflow per file, activities grouped by service domain
-- Use Temporal's retry mechanisms, fail fast on config errors
+**Workflows:**
+- Long-running, stateful orchestration only
+- One workflow per file in `workflows/`
+- Use `@workflow.defn` decorator
+- Single `@workflow.run` method as entry point
+- Handle human-in-the-loop via Telegram confirmations
 
-**File Organization:**
-- Integration clients named `{service}_client.py`
-- Full imports within package: `from the_assistant.integrations import google_client`
-- Import order: standard library, third-party, local (blank line separated)
+**Activities:**
+- Atomic, idempotent external operations
+- Use `@activity.defn` decorator
+- Group by service domain in `activities/`
+- Must be retryable - use Temporal's retry mechanisms
+- Fail fast on configuration errors
 
-**Configuration:**
-- Environment variables via `utils/config.py` only
-- Secrets as files in `/secrets/` (never environment variables)
-- Obsidian filtering uses tags: `#trip`, `#french-lesson`
+**Integration Clients:**
+- Named `{service}_client.py` (e.g., `google_client.py`)
+- Wrap ALL external API calls
+- Handle authentication and credential management
+- Return structured data types, not raw JSON
 
-## Code Style
+## Code Style Requirements
 
-- Docstrings for all public functions/classes
+**Imports (ENFORCED ORDER):**
+1. Standard library
+2. Third-party packages
+3. Local modules (`from the_assistant.integrations import google_client`)
+- Separate groups with blank lines
+- Use full imports within package
+
+**Function Requirements:**
+- Docstrings for ALL public functions and classes
 - Async/await patterns consistently
-- Walrus operator `:=` where appropriate
-- Log with sufficient context for debugging
+- Use walrus operator `:=` for assignment expressions
+- Log with sufficient context for debugging workflow failures
 
-## Testing
+**Error Handling:**
+- Use Temporal's built-in retry mechanisms in activities
+- Structured logging with context
+- Fail fast on configuration/authentication errors
 
-- Mock external integrations in unit tests
+## Configuration & Security
+
+**Environment Variables:**
+- Access ONLY through centralized `utils/config.py` functions
+- Never hardcode values in source code
+
+**Secrets Management:**
+- Secrets as files in `/secrets/` directory (mounted volumes)
+- NEVER store secrets in environment variables
+- Use proper credential stores for OAuth tokens
+
+**Obsidian Integration:**
+- Tag-based filtering: `#trip`, `#french-lesson`, `#work`
+- Markdown parsing with metadata extraction
+- Backup files before modifications
+
+## Testing Strategy
+
+**Unit Tests:**
+- Mock ALL external integrations
+- Test individual functions in isolation
+- Use pytest with async support
+
+**Integration Tests:**
 - Use Temporal test framework for workflows
-- Integration tests use real services with test data only
-- Validate workflow state transitions and activity outcomes
+- Real services with test data only
+- Validate state transitions and activity outcomes
+- Test retry logic and error handling paths
 
-## Development Commands
+## Development Workflow
 
+**Setup Commands:**
 ```bash
-uv sync --group dev    # Setup
-make fix              # Format and lint
-make test             # Run tests
-make serve            # Start FastAPI
-docker-compose up -d  # Start services
+uv sync --group dev    # Install dependencies
+make fix              # Format and lint code
+make test             # Run test suite
+make serve            # Start FastAPI server
+docker-compose up -d  # Start all services
 ```
+
+**File Creation Patterns:**
+- Activities: `{domain}_activities.py` (e.g., `google_activities.py`)
+- Workflows: `{purpose}_workflow.py` (e.g., `daily_briefing.py`)
+- Models: `{domain}.py` in `models/` (e.g., `google.py`)
+- Tests: Mirror source structure in `tests/`
 
 ## AI Assistant Principles
 
-- **Minimal Implementation**: Build working solutions, avoid over-engineering
-- **Rapid Iteration**: Basic functionality first, refactor when patterns emerge
-- **Human-in-Loop**: Use Telegram for user confirmations in workflows
-- **Proactive Automation**: Monitor and initiate workflows automatically
+**Implementation Strategy:**
+- Build minimal working solutions first
+- Iterate rapidly, avoid over-engineering
+- Implement only current requirements, not future speculation
+- Refactor when patterns emerge naturally
+
+**Human Interaction:**
+- Use Telegram for user confirmations in workflows
+- Provide clear status updates and error messages
+- Enable manual intervention points in automated processes
+
+**Automation Goals:**
+- Monitor external systems proactively
+- Initiate workflows based on triggers
+- Maintain data consistency across integrations
+- Provide intelligent scheduling and reminders

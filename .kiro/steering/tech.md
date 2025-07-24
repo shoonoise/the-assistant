@@ -2,69 +2,152 @@
 inclusion: always
 ---
 
-# Technology Stack & Development Guidelines
+# Technical Implementation Guidelines
 
-## Core Technologies
-- **Python 3.13+**: Use modern syntax, built-in types (`dict`, `list`, `tuple`), async/await patterns
-- **Temporal**: Workflow orchestration - workflows orchestrate, activities execute external operations
-- **FastAPI**: Web framework for webhooks and API endpoints
-- **Docker Compose**: Container orchestration for development and deployment
+## Critical Execution Rules
 
-## Code Style Requirements
-- Type hints required for all function signatures and return types
-- Use modern Python 3.13+ built-in types (no `from __future__ import annotations` needed)
+**Python Environment (MANDATORY):**
+- ALWAYS use `uv run python ...` - never bare `python` commands
+- Use `uvx package_name` for one-off utilities
+- Virtual environment managed by uv - direct python calls will fail
+
+**Code Style Requirements:**
+- Python 3.13+ built-in types: `dict`, `list`, `tuple` (not `Dict`, `List`, `Tuple`)
+- Type hints REQUIRED on ALL function signatures and return types
 - snake_case naming for files, functions, variables
-- Docstrings for all public functions and classes
-- Import order: standard library, third-party, local modules (grouped with blank lines)
-- Use full imports within package: `from the_assistant.integrations import google_client`
+- Async/await patterns consistently throughout
+- Import order: standard library, third-party, local modules (with blank line separation)
 
-## Architecture Patterns
-- **Workflows** (`workflows/`): Orchestrate business logic, keep stateful and long-running
-- **Activities** (`activities/`): Atomic, idempotent operations for external services
-- **Integration Clients** (`integrations/`): Wrap all external API calls in dedicated client classes
-- **Error Handling**: Use Temporal's retry mechanisms in activities, fail fast on config errors
-- **Human-in-the-Loop**: Use Telegram for user confirmations within workflows
+## Core Technology Stack
 
-## Package Management
-- **Always use `uv`** for Python execution and dependency management (never pip)
-- **uvx**: For running one-off Python utilities
-- Dependencies organized in groups: main, dev, test
-- Use `make` commands for common development tasks
+- **Temporal**: Workflow orchestration - use for business logic and external service coordination
+- **FastAPI**: Web framework for webhooks and API endpoints
+- **SQLAlchemy + Alembic**: Database ORM with async sessions and migrations
+- **Pydantic**: Data validation and serialization for all models
+- **Docker Compose**: Development environment orchestration
 
-## Development Commands
-```bash
-# Setup
-uv sync --group dev
-uv run lefthook install
+## Temporal Architecture Patterns
 
-# Code quality
-make fix        # Format and lint (auto-fix)
-make check      # Check without fixing
-make test       # Run tests
-make test-cov   # Run tests with coverage
-
-# Development
-make serve      # Start FastAPI server
-docker-compose up -d  # Start all services
-
-# Running Python scripts
-uv run python script_name.py  # Always use uv run, never just python
+**Workflows** - Orchestration only:
+```python
+@workflow.defn
+class MyWorkflow:
+    @workflow.run
+    async def run(self, input_data: MyInput) -> MyOutput:
+        result = await workflow.execute_activity(
+            my_activity,
+            input_data,
+            start_to_close_timeout=timedelta(minutes=5)
+        )
+        return result
 ```
 
-## Python Execution Guidelines
-- **ALWAYS use `uv run python ...`** instead of just `python ...`
-- The virtual environment is managed by uv, so direct python calls won't work
-- For one-off utilities, use `uvx package_name` 
-- Never activate venv manually - let uv handle it
+**Activities** - Atomic external operations:
+```python
+@activity.defn
+async def my_activity(input_data: MyInput) -> MyOutput:
+    # Must be idempotent and handle retries gracefully
+    # Fail fast on authentication/configuration errors
+    pass
+```
+
+**Error Handling:**
+- Use `RetryPolicy` for activities with exponential backoff
+- Structured logging with workflow_id and activity_id context
+- Fail fast on authentication/configuration errors
+
+## Development Commands
+
+**Setup:**
+```bash
+uv sync --group dev          # Install dependencies
+uv run lefthook install      # Setup git hooks
+```
+
+**Quality & Testing:**
+```bash
+make fix                     # Auto-format and lint
+make test                    # Run test suite
+make test-cov               # Run with coverage
+```
+
+**Services:**
+```bash
+make serve                   # Start FastAPI server
+docker-compose up -d         # Start all services
+```
+
+**Database:**
+```bash
+uv run python scripts/create_migration.py "description"
+uv run python scripts/init_db_with_migrations.py
+```
 
 ## Configuration & Security
-- Environment variables accessed through `utils/helpers.py` centralized functions
-- Secrets mounted as files in `/secrets/` directory (never in environment variables)
-- Use `.env` files for configuration (never commit secrets)
-- Tag-based filtering for Obsidian notes (e.g., `#trip`, `#french-lesson`)
+
+**Environment Variables:**
+- Access through centralized `src/the_assistant/settings.py`
+- Use Pydantic `BaseSettings` for validation
+- Never hardcode configuration values
+
+**Secrets Management:**
+- Mount secrets as files in `/secrets/` directory
+- OAuth tokens stored in database with encryption
+- NEVER store secrets in environment variables or code
+
+**Database:**
+- Use Alembic for schema migrations
+- Async SQLAlchemy sessions throughout
+- Connection pooling configured in `database.py`
+
+## Integration Client Patterns
+
+**Client Structure:**
+```python
+class ServiceClient:
+    def __init__(self, credentials: ServiceCredentials):
+        self.credentials = credentials
+        self._service = None
+    
+    async def _get_service(self):
+        if not self._service:
+            # Initialize service with credentials
+            pass
+        return self._service
+```
+
+**Requirements:**
+- Wrap ALL external API calls with proper exception handling
+- Return structured Pydantic models, not raw JSON
+- Implement exponential backoff for rate limits
+- Named as `{service}_client.py` (e.g., `google_client.py`)
 
 ## Testing Requirements
-- Mock external integrations in unit tests
-- Use Temporal's test framework for workflow testing
-- Integration tests use real services with test data only
-- Validate workflow state transitions and activity outcomes
+
+**Unit Tests:**
+```python
+@pytest.mark.asyncio
+async def test_activity_function():
+    with patch('external_service') as mock_service:
+        result = await my_activity(test_input)
+        assert result.expected_field == "expected_value"
+```
+
+**Temporal Workflow Tests:**
+```python
+async def test_workflow():
+    async with WorkflowEnvironment() as env:
+        async with Worker(env.client, task_queue="test"):
+            result = await env.client.execute_workflow(
+                MyWorkflow.run,
+                test_input,
+                id="test-workflow",
+                task_queue="test"
+            )
+```
+
+**Testing Strategy:**
+- Mock ALL external integrations in unit tests
+- Use Temporal test framework for workflow testing
+- Integration tests with real services using test data only
+- Test retry logic and error handling paths
