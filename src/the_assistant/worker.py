@@ -15,6 +15,7 @@ from temporalio.worker import Worker
 # Import activities from new organization
 from the_assistant.activities.google_activities import (
     get_calendar_events,
+    get_emails,
     get_events_by_date,
     get_today_events,
     get_upcoming_events,
@@ -62,6 +63,7 @@ async def run_worker() -> None:
                 get_upcoming_events,
                 get_events_by_date,
                 get_today_events,
+                get_emails,
                 # Obsidian activities
                 scan_vault_notes,
                 # Weather activities

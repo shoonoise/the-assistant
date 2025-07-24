@@ -33,6 +33,11 @@ class Settings(BaseSettings):
         ]
     )
 
+    # Weather
+    weather_location: str | None = Field(
+        None, env="WEATHER_LOCATION", description="Default location for forecast"
+    )
+
     # Obsidian
     obsidian_vault_path: Path | None = Field(Path("/vault"), env="OBSIDIAN_VAULT_PATH")
 
