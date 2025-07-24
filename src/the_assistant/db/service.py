@@ -32,9 +32,7 @@ class UserService:
         async with self._session_maker() as session:
             return await session.get(User, user_id)
 
-    async def get_user_by_telegram_chat_id(
-        self, telegram_chat_id: int
-    ) -> User | None:
+    async def get_user_by_telegram_chat_id(self, telegram_chat_id: int) -> User | None:
         """Retrieve a user by Telegram chat ID."""
         async with self._session_maker() as session:
             stmt = select(User).where(User.telegram_chat_id == telegram_chat_id)
@@ -50,7 +48,9 @@ class UserService:
             if user is None:
                 return
             user.google_credentials_enc = credentials_enc
-            user.google_creds_updated_at = datetime.now(UTC) if credentials_enc else None
+            user.google_creds_updated_at = (
+                datetime.now(UTC) if credentials_enc else None
+            )
             await session.commit()
 
     async def get_google_credentials(self, user_id: int) -> str | None:

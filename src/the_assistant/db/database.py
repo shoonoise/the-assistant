@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -40,7 +41,7 @@ def get_session_maker() -> async_sessionmaker[AsyncSession]:
         _session_maker = async_sessionmaker(_engine, expire_on_commit=False)
 
     assert _session_maker is not None
-    return _session_maker
+    return cast(async_sessionmaker[AsyncSession], _session_maker)
 
 
 def get_user_service() -> UserService:

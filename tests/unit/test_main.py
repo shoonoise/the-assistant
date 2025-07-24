@@ -105,7 +105,6 @@ class TestMainApp:
         # but we should have some Google OAuth related routes
         assert any("/google" in route for route in routes)
 
-
     def test_app_has_correct_metadata(self):
         """Test that the app has correct metadata."""
         assert hasattr(app, "title")
