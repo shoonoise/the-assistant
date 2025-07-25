@@ -442,3 +442,40 @@ class TestGoogleClient:
             call_args = mock_events.list.call_args[1]
             assert "timeMin" in call_args
             assert "timeMax" in call_args
+
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_important_emails(self, mock_build, mock_credentials):
+        """Test retrieval of important emails."""
+        mock_service = MagicMock()
+        mock_users = MagicMock()
+        mock_messages = MagicMock()
+        mock_list = MagicMock()
+        mock_get = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.users.return_value = mock_users
+        mock_users.messages.return_value = mock_messages
+        mock_messages.list.return_value = mock_list
+        mock_list.execute.return_value = {
+            "messages": [{"id": "m1"}],
+            "resultSizeEstimate": 1,
+        }
+        mock_messages.get.return_value = mock_get
+        mock_get.execute.return_value = {
+            "id": "m1",
+            "threadId": "t1",
+            "snippet": "hi",
+            "payload": {"headers": []},
+        }
+
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            emails, total = await client.get_important_emails(max_results=5)
+
+            assert total == 1
+            assert len(emails) == 1
+            call_args = mock_messages.list.call_args[1]
+            assert "is:important" in call_args["q"]

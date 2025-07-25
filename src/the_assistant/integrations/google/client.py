@@ -6,6 +6,7 @@ without requiring a browser in the container.
 """
 
 import asyncio
+import base64
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -450,6 +451,8 @@ class GoogleClient:
         after: datetime | None = None,
         before: datetime | None = None,
         max_results: int = 10,
+        *,
+        include_body: bool = False,
     ) -> list[GmailMessage]:
         """Retrieve emails from the user's Gmail inbox."""
 
@@ -490,7 +493,7 @@ class GoogleClient:
                     .execute()
                 )
                 try:
-                    emails.append(self._parse_gmail_message(msg))
+                    emails.append(self._parse_gmail_message(msg, include_body))
                 except Exception as parse_err:  # pragma: no cover - safeguard
                     logger.warning(
                         f"Failed to parse gmail message {item.get('id')}: {parse_err}"
@@ -505,7 +508,76 @@ class GoogleClient:
             logger.error(error_msg)
             raise GoogleGmailError(error_msg) from e
 
-    def _parse_gmail_message(self, raw_message: dict[str, Any]) -> GmailMessage:
+    async def get_important_emails(
+        self, *, max_results: int = 20, include_body: bool = True
+    ) -> tuple[list[GmailMessage], int]:
+        """Retrieve important emails and the total inbox count."""
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+        self._credentials = credentials
+        try:
+            service = await self._get_gmail_service()
+            list_kwargs = {
+                "userId": "me",
+                "maxResults": max_results,
+                "q": "is:important in:inbox",
+            }
+            messages_result = service.users().messages().list(**list_kwargs).execute()
+            total = int(messages_result.get("resultSizeEstimate", 0))
+            message_items = messages_result.get("messages", [])
+
+            emails: list[GmailMessage] = []
+            for item in message_items:
+                msg = (
+                    service.users()
+                    .messages()
+                    .get(userId="me", id=item["id"], format="full")
+                    .execute()
+                )
+                try:
+                    emails.append(self._parse_gmail_message(msg, include_body))
+                except Exception as parse_err:  # pragma: no cover - safeguard
+                    logger.warning(
+                        f"Failed to parse gmail message {item.get('id')}: {parse_err}"
+                    )
+            return emails, total
+        except HttpError as e:
+            error_msg = f"Gmail API error: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve gmail messages: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+
+    def _extract_message_body(self, payload: dict[str, Any]) -> str:
+        """Extract plain text body from Gmail message payload."""
+        if not payload:
+            return ""
+        if "parts" in payload:
+            for part in payload.get("parts", []):
+                mime = part.get("mimeType", "")
+                if mime.startswith("text/plain"):
+                    data = part.get("body", {}).get("data")
+                    if data:
+                        try:
+                            return base64.urlsafe_b64decode(data).decode(
+                                "utf-8", errors="ignore"
+                            )
+                        except Exception:
+                            continue
+        data = payload.get("body", {}).get("data")
+        if data:
+            try:
+                return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+            except Exception:
+                return ""
+        return ""
+
+    def _parse_gmail_message(
+        self, raw_message: dict[str, Any], include_body: bool = False
+    ) -> GmailMessage:
         """Parse raw Gmail API message into GmailMessage model."""
 
         headers = {
@@ -532,6 +604,9 @@ class GoogleClient:
             sender=sender,
             to=to,
             date=msg_date,
+            body=self._extract_message_body(raw_message.get("payload", {}))
+            if include_body
+            else "",
             raw_data=raw_message,
         )
 

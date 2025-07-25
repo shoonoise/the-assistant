@@ -6,18 +6,18 @@ with workflow.unsafe.imports_passed_through():
     from datetime import UTC
 
     from the_assistant.activities.google_activities import (
-        GetEmailsInput,
-        GetEventsByDateInput,
-        GetTodayEventsInput,
-        get_emails,
-        get_events_by_date,
-        get_today_events,
+        GetImportantEmailsInput,
+        GetUpcomingEventsInput,
+        get_important_emails,
+        get_upcoming_events,
     )
     from the_assistant.activities.messages_activities import (
+        BriefingPromptInput,
         BriefingSummaryInput,
-        DailyBriefingInput,
+        GetUserSettingsInput,
+        build_briefing_prompt,
         build_briefing_summary,
-        build_daily_briefing,
+        get_user_settings,
     )
     from the_assistant.activities.telegram_activities import (
         SendMessageInput,
@@ -33,16 +33,9 @@ with workflow.unsafe.imports_passed_through():
 class DailyBriefing:
     @workflow.run
     async def run(self, user_id: int) -> None:
-        today_events = await workflow.execute_activity(
-            get_today_events,
-            GetTodayEventsInput(user_id=user_id),
-            start_to_close_timeout=timedelta(seconds=10),
-        )
-
-        tomorrow = workflow.now().astimezone(UTC) + timedelta(days=1)
-        tomorrow_events = await workflow.execute_activity(
-            get_events_by_date,
-            GetEventsByDateInput(user_id=user_id, target_date=tomorrow),
+        events = await workflow.execute_activity(
+            get_upcoming_events,
+            GetUpcomingEventsInput(user_id=user_id, days_ahead=7),
             start_to_close_timeout=timedelta(seconds=10),
         )
 
@@ -52,28 +45,35 @@ class DailyBriefing:
             start_to_close_timeout=timedelta(seconds=10),
         )
 
-        emails = await workflow.execute_activity(
-            get_emails,
-            GetEmailsInput(user_id=user_id, unread_only=True, max_results=5),
+        email_data = await workflow.execute_activity(
+            get_important_emails,
+            GetImportantEmailsInput(user_id=user_id, max_full=10, max_snippets=10),
             start_to_close_timeout=timedelta(seconds=10),
         )
 
-        briefing = await workflow.execute_activity(
-            build_daily_briefing,
-            DailyBriefingInput(
-                user_id=user_id,
-                today_events=today_events,
-                tomorrow_events=tomorrow_events,
+        settings = await workflow.execute_activity(
+            get_user_settings,
+            GetUserSettingsInput(user_id=user_id),
+            start_to_close_timeout=timedelta(seconds=10),
+        )
+
+        prompt = await workflow.execute_activity(
+            build_briefing_prompt,
+            BriefingPromptInput(
+                events=events,
+                emails_full=email_data.emails_full,
+                emails_snippets=email_data.emails_snippets,
+                email_total=email_data.total,
                 weather=weather[0] if weather else None,
-                emails=emails,
+                settings=settings,
+                current_time=workflow.now().astimezone(UTC).isoformat(),
             ),
             start_to_close_timeout=timedelta(seconds=10),
         )
-
         briefing_sammary = await workflow.execute_activity(
             build_briefing_summary,
-            BriefingSummaryInput(user_id=user_id, data=briefing),
-            start_to_close_timeout=timedelta(30),
+            BriefingSummaryInput(user_id=user_id, data=prompt),
+            start_to_close_timeout=timedelta(seconds=60),
         )
 
         await workflow.execute_activity(

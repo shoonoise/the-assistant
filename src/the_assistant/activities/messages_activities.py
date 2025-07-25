@@ -1,9 +1,11 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from temporalio import activity
 
+from the_assistant.db import get_user_service
 from the_assistant.integrations.llm import LLMAgent, Task
 from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.weather import WeatherForecast
@@ -18,6 +20,22 @@ class DailyBriefingInput:
     tomorrow_events: list[CalendarEvent]
     weather: WeatherForecast | None = None
     emails: list[GmailMessage] | None = None
+
+
+@dataclass
+class BriefingPromptInput:
+    events: list[CalendarEvent]
+    emails_full: list[GmailMessage]
+    emails_snippets: list[GmailMessage]
+    email_total: int
+    weather: WeatherForecast | None
+    settings: dict[str, Any]
+    current_time: str
+
+
+@dataclass
+class GetUserSettingsInput:
+    user_id: int
 
 
 @activity.defn
@@ -74,7 +92,64 @@ async def build_briefing_summary(input: BriefingSummaryInput) -> str:
 
     agent = LLMAgent()
     task = Task(
-        prompt="You need to build a morning brief message for user, this is data: {data}",
+        prompt=(
+            "Using the provided context, write a concise daily briefing. "
+            "Summarize calendar events highlighting those that may require preparation, "
+            "summarize the emails generally but give individual short summaries for anything that looks important, "
+            "translate and summarize any French emails, and include the weather if available. Context: {data}"
+        ),
         data=input.data,
     )
     return await agent.run(task)
+
+
+@activity.defn
+async def get_user_settings(input: GetUserSettingsInput) -> dict[str, Any]:
+    """Return all settings for the given user."""
+    service = get_user_service()
+    return await service.get_all_settings(input.user_id)
+
+
+@activity.defn
+async def build_briefing_prompt(input: BriefingPromptInput) -> str:
+    """Render context data into a prompt string for the LLM."""
+
+    lines: list[str] = [f"Current time: {input.current_time}"]
+
+    if input.weather:
+        w = input.weather
+        lines.append(
+            f"Weather for {w.location}: {w.condition}, high {w.temperature_max}°C low {w.temperature_min}°C"
+        )
+
+    if input.events:
+        ev_lines = []
+        for e in input.events:
+            start = e.start_time.strftime("%Y-%m-%d %H:%M")
+            ev_lines.append(
+                f"- {e.summary} ({start}) {e.location or ''} [{e.calendar_id}]"
+            )
+        lines.append("Events next 7 days:\n" + "\n".join(ev_lines))
+
+    if input.emails_full or input.emails_snippets:
+        email_lines = []
+        for e in input.emails_full:
+            email_lines.append(
+                f"- {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}"
+            )
+        if input.emails_snippets:
+            email_lines.append("Snippets:")
+            for e in input.emails_snippets:
+                email_lines.append(
+                    f"- {e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}"
+                )
+        lines.append(
+            f"Important emails (total inbox: {input.email_total}):\n"
+            + "\n".join(email_lines)
+        )
+
+    if input.settings:
+        set_lines = "\n".join(f"- {k}: {v}" for k, v in input.settings.items())
+        lines.append("User settings:\n" + set_lines)
+
+    return "\n\n".join(lines)[:4000]

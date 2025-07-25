@@ -5,12 +5,15 @@ from .google_activities import (
     get_calendar_events,
     get_emails,
     get_events_by_date,
+    get_important_emails,
     get_today_events,
     get_upcoming_events,
 )
 from .messages_activities import (
+    build_briefing_prompt,
     build_briefing_summary,
     build_daily_briefing,
+    get_user_settings,
 )
 from .obsidian_activities import (
     scan_vault_notes,
@@ -28,6 +31,7 @@ __all__ = [
     "get_today_events",
     "get_upcoming_events",
     "get_emails",
+    "get_important_emails",
     # Obsidian activities
     "scan_vault_notes",
     # Weather activities
@@ -35,6 +39,8 @@ __all__ = [
     # Telegram activities
     "build_daily_briefing",
     "build_briefing_summary",
+    "build_briefing_prompt",
+    "get_user_settings",
     "send_formatted_message",
     "send_message",
 ]

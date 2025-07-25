@@ -79,6 +79,7 @@ class GmailMessage(BaseAssistantModel):
     sender: str = Field(default="", description="Sender email")
     to: str = Field(default="", description="Recipient email")
     date: datetime | None = Field(default=None, description="Message date")
+    body: str = Field(default="", description="Plain text body")
     raw_data: dict[str, Any] = Field(
         default_factory=dict, description="Original API response data"
     )
