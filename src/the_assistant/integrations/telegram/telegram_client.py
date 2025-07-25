@@ -219,7 +219,7 @@ class TelegramClient:
         self._command_handlers[command] = handler
         logger.info(f"Registered handler for command: /{command}")
 
-    async def register_handler(self, handler: Any) -> None:
+    async def register_handler(self, handler: ConversationHandler) -> None:
         """Register a generic Telegram handler."""
 
         self._extra_handlers.append(handler)
