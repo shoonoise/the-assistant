@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
 
 class Base(DeclarativeBase):
@@ -35,10 +36,10 @@ class User(Base):
     google_calendar_id: Mapped[str | None] = mapped_column(String)
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     settings: Mapped[list["UserSetting"]] = relationship(
@@ -65,10 +66,10 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String, nullable=False)
     value_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     user: Mapped[User] = relationship(back_populates="settings")
@@ -89,10 +90,10 @@ class ThirdPartyAccount(Base):
     credentials_enc: Mapped[str | None] = mapped_column(Text)
     creds_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     user: Mapped[User] = relationship(back_populates="third_party_accounts")

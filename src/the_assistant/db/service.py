@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .models import ThirdPartyAccount, User, UserSetting
@@ -48,25 +49,30 @@ class UserService:
     ) -> None:
         """Create or update credentials for an external account."""
         async with self._session_maker() as session:
-            stmt = select(ThirdPartyAccount).where(
-                ThirdPartyAccount.user_id == user_id,
-                ThirdPartyAccount.provider == provider,
-                ThirdPartyAccount.account == account,
-            )
-            result = await session.execute(stmt)
-            record = result.scalar_one_or_none()
-            if record:
-                record.credentials_enc = credentials_enc
-                record.creds_updated_at = datetime.now(UTC) if credentials_enc else None
-            else:
-                record = ThirdPartyAccount(
+            stmt = (
+                insert(ThirdPartyAccount)
+                .values(
                     user_id=user_id,
                     provider=provider,
                     account=account,
                     credentials_enc=credentials_enc,
                     creds_updated_at=(datetime.now(UTC) if credentials_enc else None),
                 )
-                session.add(record)
+                .on_conflict_do_update(
+                    index_elements=[
+                        ThirdPartyAccount.user_id,
+                        ThirdPartyAccount.provider,
+                        ThirdPartyAccount.account,
+                    ],
+                    set_={
+                        "credentials_enc": credentials_enc,
+                        "creds_updated_at": datetime.now(UTC)
+                        if credentials_enc
+                        else None,
+                    },
+                )
+            )
+            await session.execute(stmt)
             await session.commit()
 
     async def _get_third_party_credentials(
