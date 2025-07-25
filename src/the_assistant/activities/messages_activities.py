@@ -12,6 +12,22 @@ from the_assistant.models.weather import WeatherForecast
 
 logger = activity.logger
 
+BRIEF_PROMPT = """
+Using the provided <CONTEXT>, write a friendly and personalized daily briefing for the USER.
+
+- Begin with a warm, human-like greeting — it's their first message of the morning.
+- Highlight today's events clearly, and only mention future ones if they are clearly important.
+- Prioritize what matters most to the user: personal meetings, government messages, invoices, deliveries, and anything requiring action.
+- For emails:
+  - Prioritize unread and today's messages.
+  - Summarize read ones only if they are especially relevant.
+  - Translate and summarize in detail any messages not in English or Russian.
+- Include light, human commentary where helpful (“Looks like a busy Monday!” or “Might be a good idea to check your SFR invoice today.”).
+- Blend structure and natural tone. Avoid sounding like a machine-generated report.
+
+<CONTEXT>{data}</CONTEXT>
+"""
+
 
 @dataclass
 class DailyBriefingInput:
@@ -92,12 +108,7 @@ async def build_briefing_summary(input: BriefingSummaryInput) -> str:
 
     agent = LLMAgent()
     task = Task(
-        prompt=(
-            "Using the provided context, write a concise daily briefing. "
-            "Summarize calendar events highlighting those that may require preparation, "
-            "summarize the emails generally but give individual short summaries for anything that looks important, "
-            "translate and summarize any French emails, and include the weather if available. Context: {data}"
-        ),
+        prompt=BRIEF_PROMPT,
         data=input.data,
     )
     return await agent.run(task)
@@ -119,33 +130,33 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
     if input.weather:
         w = input.weather
         lines.append(
-            f"Weather for {w.location}: {w.condition}, high {w.temperature_max}°C low {w.temperature_min}°C"
+            f"Todays' weather: {w.condition}, high {w.temperature_max}°C low {w.temperature_min}°C"
         )
 
     if input.events:
         ev_lines = []
         for e in input.events:
             start = e.start_time.strftime("%Y-%m-%d %H:%M")
-            ev_lines.append(
-                f"- {e.summary} ({start}) {e.location or ''} [{e.calendar_id}]"
-            )
-        lines.append("Events next 7 days:\n" + "\n".join(ev_lines))
+            ev_lines.append(f"- {e.summary} ({start}) {e.location or ''} [{e.account}]")
+        lines.append("<events>" + "\n".join(ev_lines) + "</events>\n")
 
     if input.emails_full or input.emails_snippets:
         email_lines = []
         for e in input.emails_full:
             email_lines.append(
-                f"- {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}"
+                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</<email>>"
             )
         if input.emails_snippets:
-            email_lines.append("Snippets:")
+            email_lines.append("snippets:")
             for e in input.emails_snippets:
                 email_lines.append(
-                    f"- {e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}"
+                    f"<email_snippet>{e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}</email_snippet>"
                 )
         lines.append(
-            f"Important emails (total inbox: {input.email_total}):\n"
+            f"Inbox emails previews (total: {input.email_total}):\n"
+            + "<emails>"
             + "\n".join(email_lines)
+            + "</emails>"
         )
 
     if input.settings:

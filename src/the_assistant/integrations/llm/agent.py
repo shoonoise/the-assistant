@@ -11,7 +11,13 @@ from langsmith import trace
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SYSTEM_PROMPT = "You are a personal assistant. Your task is to help the user with day to day life. Response limit - 4000 symbols"
+DEFAULT_SYSTEM_PROMPT = (
+    "You are a thoughtful, friendly personal assistant helping the user with daily life."
+    " Your style is warm, conversational, and helpful—not robotic."
+    " Greet the user in the morning, and gently guide them through their day."
+    " Prioritize what truly matters—don't just list everything."
+    " Use natural language, and don't exceed 4000 symbols."
+)
 
 
 def _default_model() -> ChatOpenAI:

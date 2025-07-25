@@ -6,8 +6,6 @@ from temporalio.common import RetryPolicy
 NO_RETRY = RetryPolicy(maximum_attempts=1)
 
 with workflow.unsafe.imports_passed_through():
-    from datetime import UTC
-
     from the_assistant.activities.google_activities import (
         GetImportantEmailsAccountsInput,
         GetUpcomingEventsAccountsInput,
@@ -41,7 +39,7 @@ class DailyBriefing:
         settings = await workflow.execute_activity(
             get_user_settings,
             GetUserSettingsInput(user_id=user_id),
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=5),
             retry_policy=NO_RETRY,
         )
 
@@ -50,7 +48,7 @@ class DailyBriefing:
             GetUpcomingEventsAccountsInput(
                 user_id=user_id, days_ahead=7, accounts=accounts
             ),
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=30),
             retry_policy=NO_RETRY,
         )
 
@@ -58,19 +56,19 @@ class DailyBriefing:
             get_important_emails_accounts,
             GetImportantEmailsAccountsInput(
                 user_id=user_id,
-                max_full=10,
-                max_snippets=10,
+                max_full=15,
+                max_snippets=20,
                 accounts=accounts,
                 ignored_senders=settings.get("ignore_emails") if settings else None,
             ),
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=60),
             retry_policy=NO_RETRY,
         )
 
         weather = await workflow.execute_activity(
             get_weather_forecast,
             GetWeatherForecastInput(user_id=user_id),
-            start_to_close_timeout=timedelta(seconds=10),
+            start_to_close_timeout=timedelta(seconds=30),
             retry_policy=NO_RETRY,
         )
 
@@ -83,11 +81,12 @@ class DailyBriefing:
                 email_total=email_data.total,
                 weather=weather[0] if weather else None,
                 settings=settings,
-                current_time=workflow.now().astimezone(UTC).isoformat(),
+                current_time=workflow.now().strftime("%Y-%m-%d %A %H:%M"),
             ),
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=NO_RETRY,
         )
+
         briefing_sammary = await workflow.execute_activity(
             build_briefing_summary,
             BriefingSummaryInput(user_id=user_id, data=prompt),
