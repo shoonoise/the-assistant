@@ -22,7 +22,7 @@ async def _get_email(user_id: int, email_id: str, account: str | None = None) ->
     return email.model_dump()
 
 
-def get_default_tools(user_id: int):
+def get_default_tools(user_id: int) -> list[BaseTool]:
     """Return default agent tools bound to the given user."""
 
     @tool
