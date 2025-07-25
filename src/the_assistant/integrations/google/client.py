@@ -396,6 +396,7 @@ class GoogleClient:
             attendees=attendees,
             is_all_day=is_all_day,
             raw_data=raw_event,
+            account=self.account,
         )
 
     def _parse_event_time(self, event_time: dict[str, Any]) -> datetime:
@@ -612,6 +613,7 @@ class GoogleClient:
             if include_body
             else "",
             raw_data=raw_message,
+            account=self.account,
         )
 
 
