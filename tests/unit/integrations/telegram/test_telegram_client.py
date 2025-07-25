@@ -13,6 +13,7 @@ from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
     handle_briefing_command,
     handle_google_auth_command,
+    handle_ignore_email_command,
     save_setting,
     start_update_settings,
 )
@@ -472,3 +473,23 @@ class TestUpdateSettings:
             mock_update.message.text = "Hi"
             with pytest.raises(ValueError):
                 await save_setting(mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_handle_ignore_email_command(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_setting = AsyncMock(return_value=[])
+        user_service.set_setting = AsyncMock()
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = ["*@spam.com"]
+            await handle_ignore_email_command(mock_update, mock_context)
+
+        user_service.set_setting.assert_awaited_once_with(
+            1, "ignore_emails", ["*@spam.com"]
+        )
+        assert mock_update.message.reply_text.called

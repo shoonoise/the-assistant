@@ -59,6 +59,7 @@ class GetEmailsInput:
     unread_only: bool = True
     sender: str | None = None
     max_results: int = 5
+    ignored_senders: list[str] | None = None
 
 
 @dataclass
@@ -67,6 +68,7 @@ class GetImportantEmailsInput:
     account: str | None = None
     max_full: int = 10
     max_snippets: int = 10
+    ignored_senders: list[str] | None = None
 
 
 @dataclass
@@ -94,6 +96,7 @@ class GetImportantEmailsAccountsInput:
     accounts: list[str]
     max_full: int = 10
     max_snippets: int = 10
+    ignored_senders: list[str] | None = None
 
 
 def get_google_client(user_id: int, account: str | None = None) -> GoogleClient:
@@ -252,6 +255,7 @@ async def get_emails(input: GetEmailsInput) -> list[GmailMessage]:
         unread_only=input.unread_only,
         sender=input.sender,
         max_results=input.max_results,
+        ignored_senders=input.ignored_senders,
     )
 
     logger.info(f"Retrieved {len(emails)} emails")
@@ -273,6 +277,7 @@ async def get_important_emails(
     emails, total = await client.get_important_emails(
         max_results=input.max_full + input.max_snippets,
         include_body=True,
+        ignored_senders=input.ignored_senders,
     )
 
     emails_full = emails[: input.max_full]
@@ -326,6 +331,7 @@ async def get_important_emails_accounts(
                 max_full=input.max_full,
                 max_snippets=input.max_snippets,
                 account=account,
+                ignored_senders=input.ignored_senders,
             )
         )
         for account in input.accounts

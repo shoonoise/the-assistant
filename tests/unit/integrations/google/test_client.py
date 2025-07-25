@@ -379,7 +379,9 @@ class TestGoogleClient:
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
             emails = await client.get_emails(
-                unread_only=True, sender="sender@example.com"
+                unread_only=True,
+                sender="sender@example.com",
+                ignored_senders=None,
             )
 
             assert len(emails) == 1
@@ -393,6 +395,42 @@ class TestGoogleClient:
             mock_build.assert_called_once_with(
                 "gmail", "v1", credentials=mock_credentials
             )
+
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_emails_ignored(self, mock_build, mock_credentials):
+        """Emails from ignored senders are filtered out."""
+        mock_service = MagicMock()
+        mock_users = MagicMock()
+        mock_messages = MagicMock()
+        mock_list = MagicMock()
+        mock_get = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.users.return_value = mock_users
+        mock_users.messages.return_value = mock_messages
+        mock_messages.list.return_value = mock_list
+        mock_list.execute.return_value = {"messages": [{"id": "m1"}]}
+        mock_messages.get.return_value = mock_get
+        mock_get.execute.return_value = {
+            "id": "m1",
+            "threadId": "t1",
+            "snippet": "hi",
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Test"},
+                    {"name": "From", "value": "spam@news.com"},
+                ]
+            },
+        }
+
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            emails = await client.get_emails(ignored_senders=["*@news.com"])
+
+            assert emails == []
 
     @patch("the_assistant.integrations.google.client.build")
     async def test_get_emails_http_error(self, mock_build, mock_credentials):
@@ -416,7 +454,7 @@ class TestGoogleClient:
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
             with pytest.raises(GoogleGmailError, match="Gmail API error"):
-                await client.get_emails()
+                await client.get_emails(ignored_senders=None)
 
     async def test_get_emails_not_authenticated(self):
         """Test Gmail retrieval when not authenticated."""
@@ -427,7 +465,7 @@ class TestGoogleClient:
             mock_get_credentials.return_value = None
 
             with pytest.raises(GoogleAuthError, match="No valid credentials available"):
-                await client.get_emails()
+                await client.get_emails(ignored_senders=None)
 
     @patch("the_assistant.integrations.google.client.build")
     async def test_get_events_by_date(self, mock_build, mock_credentials):
@@ -485,7 +523,9 @@ class TestGoogleClient:
             client, "get_credentials", new_callable=AsyncMock
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
-            emails, total = await client.get_important_emails(max_results=5)
+            emails, total = await client.get_important_emails(
+                max_results=5, ignored_senders=None
+            )
 
             assert total == 1
             assert len(emails) == 1
@@ -504,3 +544,18 @@ def test_extract_message_body_html_conversion():
     assert "Hello" in result
     assert "world" in result
     assert "<" not in result
+
+
+@pytest.mark.parametrize(
+    "mask,sender",
+    [
+        ("*sender@domain.com", "foo_sender@domain.com"),
+        ("sender@domain.*", "sender@domain.org"),
+        ("full_name@fulldomain.com", "Full Name <full_name@fulldomain.com>"),
+    ],
+)
+def test_sender_matches_various_patterns(mask: str, sender: str) -> None:
+    """_sender_matches handles different glob patterns."""
+    client = GoogleClient.__new__(GoogleClient)
+
+    assert client._sender_matches(sender, [mask])

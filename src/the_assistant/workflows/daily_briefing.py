@@ -50,7 +50,11 @@ class DailyBriefing:
         email_data = await workflow.execute_activity(
             get_important_emails_accounts,
             GetImportantEmailsAccountsInput(
-                user_id=user_id, max_full=10, max_snippets=10, accounts=accounts
+                user_id=user_id,
+                max_full=10,
+                max_snippets=10,
+                accounts=accounts,
+                ignored_senders=settings.get("ignore_emails") if settings else None,
             ),
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=NO_RETRY,
