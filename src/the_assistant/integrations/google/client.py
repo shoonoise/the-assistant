@@ -579,7 +579,7 @@ class GoogleClient:
     def _sender_matches(self, sender: str, masks: list[str]) -> bool:
         """Return True if sender matches any of the glob masks."""
         address = parseaddr(sender)[1].lower()
-        domain = address.split("@")[-1]
+        domain = address.partition("@")[2]
         for pattern in masks:
             p = pattern.lower()
             if fnmatch(address, p) or fnmatch(domain, p):

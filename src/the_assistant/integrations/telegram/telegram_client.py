@@ -605,9 +605,10 @@ async def handle_ignore_email_command(
     if not user:
         raise ValueError("User not registered")
 
-    ignored = (
-        await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS.value) or []
+    raw_ignored = await user_service.get_setting(
+        user.id, SettingKey.IGNORE_EMAILS.value
     )
+    ignored = raw_ignored if isinstance(raw_ignored, list) else []
     if mask not in ignored:
         ignored.append(mask)
         await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS.value, ignored)
