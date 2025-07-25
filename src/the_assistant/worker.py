@@ -17,12 +17,15 @@ from the_assistant.activities.google_activities import (
     get_calendar_events,
     get_emails,
     get_events_by_date,
+    get_important_emails,
     get_today_events,
     get_upcoming_events,
 )
 from the_assistant.activities.messages_activities import (
+    build_briefing_prompt,
     build_briefing_summary,
     build_daily_briefing,
+    get_user_settings,
 )
 from the_assistant.activities.obsidian_activities import (
     scan_vault_notes,
@@ -67,6 +70,7 @@ async def run_worker() -> None:
                 get_events_by_date,
                 get_today_events,
                 get_emails,
+                get_important_emails,
                 # Obsidian activities
                 scan_vault_notes,
                 # Weather activities
@@ -74,6 +78,8 @@ async def run_worker() -> None:
                 # Messages activities
                 build_daily_briefing,
                 build_briefing_summary,
+                build_briefing_prompt,
+                get_user_settings,
                 # Telegram activities
                 send_message,
             ],
