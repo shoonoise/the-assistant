@@ -318,8 +318,8 @@ async def get_important_emails_accounts(
     emails_snippets: list[GmailMessage] = []
     total = 0
 
-    for account in input.accounts:
-        result = await get_important_emails(
+    tasks = [
+        get_important_emails(
             GetImportantEmailsInput(
                 user_id=input.user_id,
                 max_full=input.max_full,
@@ -327,6 +327,14 @@ async def get_important_emails_accounts(
                 account=account,
             )
         )
+        for account in input.accounts
+    ]
+    results = await asyncio.gather(*tasks)
+
+    emails_full = []
+    emails_snippets = []
+    total = 0
+    for result in results:
         emails_full.extend(result.emails_full)
         emails_snippets.extend(result.emails_snippets)
         total += result.total
