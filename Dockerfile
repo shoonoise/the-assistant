@@ -1,5 +1,9 @@
 FROM python:3.13 AS builder
 
+# Set environment variables early
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV UV_COMPILE_BYTECODE=1
+
 # Install uv from official image (pinned version)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -8,9 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Set environment variables
-ENV UV_COMPILE_BYTECODE=1
 
 # Copy dependency files first (for better caching)
 COPY pyproject.toml uv.lock ./
@@ -30,6 +31,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 FROM python:3.13-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
