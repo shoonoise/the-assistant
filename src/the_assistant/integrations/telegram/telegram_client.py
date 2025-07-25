@@ -67,7 +67,7 @@ class TelegramClient:
         self._command_handlers: dict[
             str, Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
         ] = {}
-        self._extra_handlers: list[Any] = []
+        self._extra_handlers: list[ConversationHandler] = []
 
         logger.info(f"Telegram client initialized for user_id: {user_id}")
 
