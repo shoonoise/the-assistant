@@ -192,6 +192,10 @@ docker-compose up -d
 
 # Check logs
 docker-compose logs -f app
+
+# After modifying source code, simply restart the affected containers
+# without rebuilding the images:
+docker-compose restart app worker telegram-bot
 ```
 
 **Production mode**:
