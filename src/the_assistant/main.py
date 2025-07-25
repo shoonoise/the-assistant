@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
+from .activities.google_activities import get_google_client
 from .integrations.google.oauth_router import router as google_oauth_router
 from .settings import get_settings
 
@@ -55,17 +56,12 @@ async def auth_error(error: str | None = None, message: str | None = None):
 
 
 @app.get("/test-calendar")
-async def test_calendar(user_id: int = 1):
+async def test_calendar(user_id: int = 1, account: str = "personal"):
     """Test endpoint to verify Google Calendar access works."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    from .activities.google_activities import get_google_client
 
     try:
         logger.info(f"Starting test_calendar for user {user_id}")
-        client = get_google_client(user_id)
+        client = get_google_client(user_id, account=account)
         logger.info(f"Created client for user {user_id}")
 
         # Get raw credentials for debugging
@@ -136,17 +132,13 @@ async def test_gmail(
     unread_only: bool | None = None,
     sender: str | None = None,
     max_results: int = 5,
+    account: str | None = None,
 ):
     """Test endpoint to verify Gmail access works."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    from .activities.google_activities import get_google_client
 
     try:
         logger.info(f"Starting test_gmail for user {user_id}")
-        client = get_google_client(user_id)
+        client = get_google_client(user_id, account)
         logger.info(f"Created client for user {user_id}")
 
         logger.info(f"Getting credentials for user {user_id}")
