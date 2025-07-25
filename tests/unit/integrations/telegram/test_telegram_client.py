@@ -6,13 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot, Chat, Message, Update, User
 from telegram.constants import ParseMode
-from telegram.error import (
-    BadRequest,
-    Forbidden,
-    NetworkError,
-    RetryAfter,
-    TelegramError,
-)
+from telegram.error import NetworkError, TelegramError
 
 from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.integrations.telegram.telegram_client import (
@@ -114,70 +108,6 @@ class TestTelegramClient:
         telegram_client.bot.get_me.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_respect_rate_limit(self, telegram_client):
-        """Test rate limit handling."""
-        # Test with RetryAfter exception
-        e = RetryAfter(3)
-        with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-            result = await telegram_client._respect_rate_limit(e)
-            assert result is True
-            mock_sleep.assert_called_once_with(3)
-
-        # Test with other exception
-        e = Exception("Other error")
-        result = await telegram_client._respect_rate_limit(e)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_handle_message_error_rate_limit(self, telegram_client):
-        """Test message error handling with rate limit."""
-        e = RetryAfter(3)
-        with patch.object(
-            telegram_client, "_respect_rate_limit", AsyncMock(return_value=True)
-        ) as mock_rate_limit:
-            result = await telegram_client._handle_message_error(e, 123)
-            assert result is True
-            mock_rate_limit.assert_called_once_with(e)
-
-    @pytest.mark.asyncio
-    async def test_handle_message_error_network_error(self, telegram_client):
-        """Test message error handling with network error."""
-        e = NetworkError("Network error")
-        with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-            # Test with retry count < max_retries
-            result = await telegram_client._handle_message_error(e, 123, 0)
-            assert result is True
-            mock_sleep.assert_called_once_with(1)  # 2^0 = 1
-
-            # Test with retry count >= max_retries
-            result = await telegram_client._handle_message_error(e, 123, 3)
-            assert result is False
-
-    @pytest.mark.asyncio
-    async def test_handle_message_error_bad_request(self, telegram_client):
-        """Test message error handling with bad request."""
-        e = BadRequest("Bad request")
-        with patch.object(
-            telegram_client, "_respect_rate_limit", AsyncMock(return_value=False)
-        ):
-            result = await telegram_client._handle_message_error(e, 123)
-            assert result is False
-
-    @pytest.mark.asyncio
-    async def test_handle_message_error_forbidden(self, telegram_client):
-        """Test message error handling with forbidden error."""
-        e = Forbidden("Forbidden")
-        result = await telegram_client._handle_message_error(e, 123)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_handle_message_error_other(self, telegram_client):
-        """Test message error handling with other error."""
-        e = Exception("Other error")
-        result = await telegram_client._handle_message_error(e, 123)
-        assert result is False
-
-    @pytest.mark.asyncio
     async def test_send_message_success(self, telegram_client):
         """Test successful message sending."""
         # Mock user service to return a user with telegram_chat_id
@@ -200,55 +130,21 @@ class TestTelegramClient:
             )
 
     @pytest.mark.asyncio
-    async def test_send_message_error_with_retry(self, telegram_client):
-        """Test message sending with error and retry."""
-        # Mock user service to return a user with telegram_chat_id
+    async def test_send_message_error_propagates(self, telegram_client):
+        """Send message raises when the Telegram API fails."""
         mock_user = SimpleNamespace(telegram_chat_id=123)
 
-        telegram_client.bot.send_message.side_effect = [
-            NetworkError("Network error"),
-            None,
-        ]
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service"
-            ) as mock_get_service,
-            patch.object(
-                telegram_client, "_handle_message_error", AsyncMock(return_value=True)
-            ) as mock_handle_error,
-        ):
+        telegram_client.bot.send_message.side_effect = NetworkError("Network error")
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service"
+        ) as mock_get_service:
             mock_service = AsyncMock()
             mock_service.get_user_by_id.return_value = mock_user
             mock_get_service.return_value = mock_service
 
-            result = await telegram_client.send_message("Test message")
-            assert result is True
-            assert mock_handle_error.call_count == 1
-            assert telegram_client.bot.send_message.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_send_message_error_without_retry(self, telegram_client):
-        """Test message sending with error and no retry."""
-        # Mock user service to return a user with telegram_chat_id
-        mock_user = SimpleNamespace(telegram_chat_id=123)
-
-        telegram_client.bot.send_message.side_effect = BadRequest("Bad request")
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service"
-            ) as mock_get_service,
-            patch.object(
-                telegram_client, "_handle_message_error", AsyncMock(return_value=False)
-            ) as mock_handle_error,
-        ):
-            mock_service = AsyncMock()
-            mock_service.get_user_by_id.return_value = mock_user
-            mock_get_service.return_value = mock_service
-
-            result = await telegram_client.send_message("Test message")
-            assert result is False
-            assert mock_handle_error.call_count == 1
-            assert telegram_client.bot.send_message.call_count == 1
+            with pytest.raises(NetworkError):
+                await telegram_client.send_message("Test message")
+            telegram_client.bot.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_register_command_handler(self, telegram_client):

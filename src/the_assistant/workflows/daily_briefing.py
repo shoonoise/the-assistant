@@ -1,6 +1,9 @@
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
+
+NO_RETRY = RetryPolicy(maximum_attempts=1)
 
 with workflow.unsafe.imports_passed_through():
     from datetime import UTC
@@ -41,6 +44,7 @@ class DailyBriefing:
                 user_id=user_id, days_ahead=7, accounts=accounts
             ),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
 
         email_data = await workflow.execute_activity(
@@ -49,18 +53,21 @@ class DailyBriefing:
                 user_id=user_id, max_full=10, max_snippets=10, accounts=accounts
             ),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
 
         weather = await workflow.execute_activity(
             get_weather_forecast,
             GetWeatherForecastInput(user_id=user_id),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
 
         settings = await workflow.execute_activity(
             get_user_settings,
             GetUserSettingsInput(user_id=user_id),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
 
         prompt = await workflow.execute_activity(
@@ -75,15 +82,18 @@ class DailyBriefing:
                 current_time=workflow.now().astimezone(UTC).isoformat(),
             ),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
         briefing_sammary = await workflow.execute_activity(
             build_briefing_summary,
             BriefingSummaryInput(user_id=user_id, data=prompt),
             start_to_close_timeout=timedelta(seconds=60),
+            retry_policy=NO_RETRY,
         )
 
         await workflow.execute_activity(
             send_message,
             SendMessageInput(user_id=user_id, text=briefing_sammary),
             start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
         )
