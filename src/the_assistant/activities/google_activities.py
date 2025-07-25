@@ -5,6 +5,7 @@ This module provides Temporal activities for interacting with Google Calendar AP
 Activities are atomic, idempotent operations that can be retried by Temporal.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
