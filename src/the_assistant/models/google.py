@@ -38,6 +38,7 @@ class CalendarEvent(BaseAssistantModel):
     raw_data: dict[str, Any] = Field(
         default_factory=dict, description="Original API response data"
     )
+    account: str | None = Field(default=None, description="Google account identifier")
 
     @computed_field
     @property
@@ -83,6 +84,7 @@ class GmailMessage(BaseAssistantModel):
     raw_data: dict[str, Any] = Field(
         default_factory=dict, description="Original API response data"
     )
+    account: str | None = Field(default=None, description="Google account identifier")
 
     @computed_field
     @property
