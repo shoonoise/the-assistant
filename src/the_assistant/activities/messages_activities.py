@@ -152,4 +152,4 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
         set_lines = "\n".join(f"- {k}: {v}" for k, v in input.settings.items())
         lines.append("User settings:\n" + set_lines)
 
-    return "\n\n".join(lines)[:4000]
+    return "\n\n".join(lines)
