@@ -579,7 +579,9 @@ class TestGoogleClient:
             email = await client.get_email("m1")
 
             assert email.id == "m1"
-            mock_messages.get.assert_called_once_with(userId="me", id="m1", format="full")
+            mock_messages.get.assert_called_once_with(
+                userId="me", id="m1", format="full"
+            )
 
 
 def test_extract_message_body_html_conversion():

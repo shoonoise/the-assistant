@@ -1,4 +1,4 @@
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
 from .google.client import GoogleClient
 from .telegram.telegram_client import TelegramClient
