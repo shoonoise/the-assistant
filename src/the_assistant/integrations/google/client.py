@@ -9,6 +9,8 @@ import asyncio
 import base64
 import logging
 from datetime import UTC, datetime, timedelta
+from email.utils import parseaddr
+from fnmatch import fnmatch
 from typing import Any
 
 import html2text
@@ -459,6 +461,7 @@ class GoogleClient:
         max_results: int = 10,
         *,
         include_body: bool = False,
+        ignored_senders: list[str] | None = None,
     ) -> list[GmailMessage]:
         """Retrieve emails from the user's Gmail inbox."""
 
@@ -504,6 +507,12 @@ class GoogleClient:
                     logger.warning(
                         f"Failed to parse gmail message {item.get('id')}: {parse_err}"
                     )
+            if ignored_senders:
+                emails = [
+                    e
+                    for e in emails
+                    if not self._sender_matches(e.sender, ignored_senders)
+                ]
             return emails
         except HttpError as e:
             error_msg = f"Gmail API error: {e}"
@@ -515,7 +524,11 @@ class GoogleClient:
             raise GoogleGmailError(error_msg) from e
 
     async def get_important_emails(
-        self, *, max_results: int = 20, include_body: bool = True
+        self,
+        *,
+        max_results: int = 20,
+        include_body: bool = True,
+        ignored_senders: list[str] | None = None,
     ) -> tuple[list[GmailMessage], int]:
         """Retrieve important emails and the total inbox count."""
         credentials = await self.get_credentials()
@@ -527,7 +540,7 @@ class GoogleClient:
             list_kwargs = {
                 "userId": "me",
                 "maxResults": max_results,
-                "q": "is:important in:inbox",
+                "q": "in:inbox",
             }
             messages_result = service.users().messages().list(**list_kwargs).execute()
             total = int(messages_result.get("resultSizeEstimate", 0))
@@ -547,6 +560,12 @@ class GoogleClient:
                     logger.warning(
                         f"Failed to parse gmail message {item.get('id')}: {parse_err}"
                     )
+            if ignored_senders:
+                emails = [
+                    e
+                    for e in emails
+                    if not self._sender_matches(e.sender, ignored_senders)
+                ]
             return emails, total
         except HttpError as e:
             error_msg = f"Gmail API error: {e}"
@@ -556,6 +575,16 @@ class GoogleClient:
             error_msg = f"Failed to retrieve gmail messages: {e}"
             logger.error(error_msg)
             raise GoogleGmailError(error_msg) from e
+
+    def _sender_matches(self, sender: str, masks: list[str]) -> bool:
+        """Return True if sender matches any of the glob masks."""
+        address = parseaddr(sender)[1].lower()
+        domain = address.partition("@")[2]
+        for pattern in masks:
+            p = pattern.lower()
+            if fnmatch(address, p) or fnmatch(domain, p):
+                return True
+        return False
 
     def _trim_lines(self, text: str, limit: int = 50) -> str:
         """Trim long text to a limited number of lines."""

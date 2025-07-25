@@ -15,6 +15,7 @@ class SettingKey(str, Enum):
     BRIEFING_TIME = "briefing_time"
     ABOUT_ME = "about_me"
     LOCATION = "location"
+    IGNORE_EMAILS = "ignore_emails"
 
 
 SETTINGS_LABEL_MAP: dict[str, SettingKey] = {
@@ -22,4 +23,5 @@ SETTINGS_LABEL_MAP: dict[str, SettingKey] = {
     "Briefing time": SettingKey.BRIEFING_TIME,
     "About me": SettingKey.ABOUT_ME,
     "Location": SettingKey.LOCATION,
+    "Ignored email senders": SettingKey.IGNORE_EMAILS,
 }

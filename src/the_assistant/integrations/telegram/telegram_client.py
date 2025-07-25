@@ -583,6 +583,39 @@ async def handle_google_auth_command(
     logger.info(f"Sent Google auth link to user {chat_user.id}")
 
 
+async def handle_ignore_email_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Add an email mask to the ignored list for the user."""
+
+    if not update.message or not update.effective_user:
+        logger.warning("Received ignore_email command without message or user")
+        return
+
+    args = getattr(context, "args", [])
+    if not args:
+        await update.message.reply_text("Usage: /ignore_email <email or mask>")
+        return
+
+    mask = args[0].strip()
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        raise ValueError("User not registered")
+
+    raw_ignored = await user_service.get_setting(
+        user.id, SettingKey.IGNORE_EMAILS.value
+    )
+    ignored = raw_ignored if isinstance(raw_ignored, list) else []
+    if mask not in ignored:
+        ignored.append(mask)
+        await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS.value, ignored)
+
+    await update.message.reply_text(f"Emails matching '{mask}' will be ignored.")
+
+
 async def create_telegram_client() -> TelegramClient:
     """Create a TelegramClient instance using environment variables.
 
@@ -608,6 +641,7 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("briefing", handle_briefing_command)
     await client.register_command_handler("settings", handle_settings_command)
     await client.register_command_handler("google_auth", handle_google_auth_command)
+    await client.register_command_handler("ignore_email", handle_ignore_email_command)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],
