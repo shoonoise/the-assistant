@@ -257,8 +257,8 @@ class TelegramClient:
 
         error_message += "\nUse /help for more detailed information about each command."
 
-        # Send the error message
-        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
+        # Send the error message without markdown to avoid parsing issues
+        await update.message.reply_text(error_message)
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -281,7 +281,12 @@ class TelegramClient:
             self.application.add_handler(CommandHandler(command, handler))
             logger.info(f"Added handler for command: /{command}")
 
-        # Add handler for unknown commands
+        # Register additional handlers such as conversations BEFORE unknown command handler
+        for handler in self._extra_handlers:
+            self.application.add_handler(handler)
+            logger.info("Added additional handler")
+
+        # Add handler for unknown commands (must be last to catch unhandled commands)
         self.application.add_handler(
             MessageHandler(
                 filters.COMMAND & ~filters.UpdateType.EDITED_MESSAGE,
@@ -289,11 +294,6 @@ class TelegramClient:
             )
         )
         logger.info("Added handler for unknown commands")
-
-        # Register additional handlers such as conversations
-        for handler in self._extra_handlers:
-            self.application.add_handler(handler)
-            logger.info("Added additional handler")
 
     async def start_polling(self) -> None:
         """Start the bot in polling mode.
