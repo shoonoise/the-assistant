@@ -647,7 +647,10 @@ async def handle_google_auth_command(
     if not user:
         raise ValueError("User not registered")
 
-    client = GoogleClient(user.id)
+    args = getattr(context, "args", [])
+    account = args[0] if args else None
+
+    client = GoogleClient(user.id, account=account)
     if await client.is_authenticated():
         await update.message.reply_text(
             "✅ You are already authenticated with Google.",
@@ -655,7 +658,7 @@ async def handle_google_auth_command(
         return
 
     settings = get_settings()
-    state = create_state_jwt(user.id, settings)
+    state = create_state_jwt(user.id, settings, account=account)
     auth_url = await client.generate_auth_url(state)
 
     message = (

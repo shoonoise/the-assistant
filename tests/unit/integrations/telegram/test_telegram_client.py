@@ -327,17 +327,23 @@ class TestTelegramClient:
             patch(
                 "the_assistant.integrations.telegram.telegram_client.GoogleClient",
                 return_value=google_client,
-            ),
+            ) as mock_client,
             patch(
                 "the_assistant.integrations.telegram.telegram_client.create_state_jwt",
                 return_value="state",
-            ),
+            ) as mock_state,
             patch(
                 "the_assistant.integrations.telegram.telegram_client.get_settings",
                 return_value=SimpleNamespace(jwt_secret="test-secret"),
-            ),
+            ) as mock_settings,
         ):
+            mock_context.args = ["personal"]
             await handle_google_auth_command(mock_update, mock_context)
+
+        mock_client.assert_called_once_with(user.id, account="personal")
+        mock_state.assert_called_once_with(
+            user.id, mock_settings.return_value, account="personal"
+        )
 
         google_client.generate_auth_url.assert_awaited_once_with("state")
         assert mock_update.message.reply_text.called
@@ -364,9 +370,12 @@ class TestTelegramClient:
             patch(
                 "the_assistant.integrations.telegram.telegram_client.GoogleClient",
                 return_value=google_client,
-            ),
+            ) as mock_client,
         ):
+            mock_context.args = ["work"]
             await handle_google_auth_command(mock_update, mock_context)
+
+        mock_client.assert_called_once_with(user.id, account="work")
 
         google_client.is_authenticated.assert_awaited_once()
         assert mock_update.message.reply_text.called
@@ -385,6 +394,7 @@ class TestTelegramClient:
             "the_assistant.integrations.telegram.telegram_client.get_user_service",
             return_value=user_service,
         ):
+            mock_context.args = []
             with pytest.raises(ValueError):
                 await handle_google_auth_command(mock_update, mock_context)
 
