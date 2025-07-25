@@ -603,12 +603,10 @@ class GoogleClient:
 
         if html_body:
             try:
-                import html2text
-
                 plain = html2text.html2text(html_body)
                 return self._trim_lines(plain)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to convert HTML to text: {e}")
 
         return ""
 
