@@ -217,8 +217,6 @@ class GoogleClient:
         if self._calendar_service is None:
             if not self._credentials:
                 self._credentials = await self.get_credentials()
-                if not self._credentials:
-                    raise GoogleAuthError("No valid credentials available")
 
             try:
                 self._calendar_service = build(
@@ -617,8 +615,8 @@ class GoogleClient:
 
         try:
             service = await self._get_calendar_service()
-            raw_event = (
-                service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+            raw_event = await asyncio.to_thread(
+                service.events().get(calendarId=calendar_id, eventId=event_id).execute
             )
             return self._parse_calendar_event(raw_event, calendar_id)
         except HttpError as e:
@@ -640,11 +638,11 @@ class GoogleClient:
 
         try:
             service = await self._get_gmail_service()
-            msg = (
+            msg = await asyncio.to_thread(
                 service.users()
                 .messages()
                 .get(userId="me", id=email_id, format="full")
-                .execute()
+                .execute
             )
             return self._parse_gmail_message(msg, include_body=True)
         except HttpError as e:
