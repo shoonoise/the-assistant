@@ -92,6 +92,14 @@ class GmailMessage(BaseAssistantModel):
         """Check if the message is unread."""
         return "UNREAD" in self.raw_data.get("labelIds", [])
 
+    @computed_field
+    @property
+    def formatted_date(self) -> str | None:
+        """Return the message date formatted without seconds or timezone."""
+        if not self.date:
+            return None
+        return f"{self.date.day} {self.date.strftime('%B %Y %H:%M')}"
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GmailMessage":
         """Create GmailMessage from raw dictionary data."""

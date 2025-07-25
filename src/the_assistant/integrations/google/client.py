@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import html2text
 from google.auth.transport.requests import Request  # type: ignore[import-untyped]
 from google.oauth2.credentials import Credentials  # type: ignore[import-untyped]
 from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
@@ -556,28 +557,58 @@ class GoogleClient:
             logger.error(error_msg)
             raise GoogleGmailError(error_msg) from e
 
+    def _trim_lines(self, text: str, limit: int = 50) -> str:
+        """Trim long text to a limited number of lines."""
+        lines = text.splitlines()
+        if len(lines) <= limit:
+            return text
+        remaining = len(lines) - limit
+        return "\n".join(lines[:limit]) + f"\n[...{remaining} lines left]"
+
     def _extract_message_body(self, payload: dict[str, Any]) -> str:
         """Extract plain text body from Gmail message payload."""
         if not payload:
             return ""
+
+        html_body = ""
+
         if "parts" in payload:
             for part in payload.get("parts", []):
                 mime = part.get("mimeType", "")
+                data = part.get("body", {}).get("data")
+                if not data:
+                    continue
+                try:
+                    decoded = base64.urlsafe_b64decode(data).decode(
+                        "utf-8", errors="ignore"
+                    )
+                except Exception:
+                    continue
                 if mime.startswith("text/plain"):
-                    data = part.get("body", {}).get("data")
-                    if data:
-                        try:
-                            return base64.urlsafe_b64decode(data).decode(
-                                "utf-8", errors="ignore"
-                            )
-                        except Exception:
-                            continue
+                    return self._trim_lines(decoded)
+                if mime.startswith("text/html") and not html_body:
+                    html_body = decoded
+
         data = payload.get("body", {}).get("data")
         if data:
             try:
-                return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+                decoded = base64.urlsafe_b64decode(data).decode(
+                    "utf-8", errors="ignore"
+                )
+                if payload.get("mimeType", "").startswith("text/html"):
+                    html_body = decoded
+                else:
+                    return self._trim_lines(decoded)
             except Exception:
                 return ""
+
+        if html_body:
+            try:
+                plain = html2text.html2text(html_body)
+                return self._trim_lines(plain)
+            except Exception as e:
+                logger.warning(f"Failed to convert HTML to text: {e}")
+
         return ""
 
     def _parse_gmail_message(

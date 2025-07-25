@@ -14,7 +14,7 @@ except ImportError:
 
     UTC = UTC
 
-from the_assistant.models.google import CalendarEvent
+from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.obsidian import (
     Heading,
     Link,
@@ -161,6 +161,13 @@ def test_obsidian_note_date_parsing():
             metadata={"start_date": date_str},
         )
         assert note.start_date == expected_date, f"Failed to parse {date_str}"
+
+
+def test_gmail_message_formatted_date():
+    """GmailMessage formats dates without timezone or seconds."""
+    dt = datetime(2025, 4, 1, 13, 0, tzinfo=UTC)
+    msg = GmailMessage(id="1", thread_id="t", snippet="", date=dt)
+    assert msg.formatted_date == "1 April 2025 13:00"
 
 
 # TripInfo and TripNotification models were removed as they weren't actually used
