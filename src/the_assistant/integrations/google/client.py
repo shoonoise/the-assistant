@@ -11,6 +11,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import html2text
 from google.auth.transport.requests import Request  # type: ignore[import-untyped]
 from google.oauth2.credentials import Credentials  # type: ignore[import-untyped]
 from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
