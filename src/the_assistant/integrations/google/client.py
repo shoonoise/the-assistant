@@ -56,18 +56,22 @@ class GoogleClient:
         self,
         user_id: int,
         redirect_uri: str | None = None,
+        account: str | None = None,
     ):
         """
         Initialize the Google client.
 
         Args:
             user_id: Database user ID
+            account: Optional account identifier when using multiple accounts
         """
         self.user_id = user_id
+        self.account = account
         self.settings = get_settings()
 
         self.credential_store = PostgresCredentialStore(
-            encryption_key=self.settings.db_encryption_key
+            encryption_key=self.settings.db_encryption_key,
+            account=self.account,
         )
         self.credentials_path = self.settings.google_credentials_path
         self.scopes = self.settings.google_oauth_scopes

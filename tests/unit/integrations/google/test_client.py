@@ -105,11 +105,22 @@ class TestGoogleClient:
         assert client.user_id == 1
         assert client.settings == self.mock_settings
         self.mock_store_class.assert_called_once_with(
-            encryption_key=self.mock_settings.db_encryption_key
+            encryption_key=self.mock_settings.db_encryption_key,
+            account=None,
         )
         assert client.credential_store == self.mock_store_instance
         assert client.credentials_path == self.mock_settings.google_credentials_path
         assert client.scopes == self.mock_settings.google_oauth_scopes
+
+    def test_init_with_account(self):
+        """GoogleClient forwards account to credential store."""
+        client = GoogleClient(user_id=1, account="personal")
+
+        self.mock_store_class.assert_called_with(
+            encryption_key=self.mock_settings.db_encryption_key,
+            account="personal",
+        )
+        assert client.account == "personal"
 
     @patch("the_assistant.integrations.google.client.GoogleClient.get_credentials")
     async def test_is_authenticated_no_credentials(self, mock_get_credentials):

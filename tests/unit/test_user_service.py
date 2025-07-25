@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from the_assistant.db.models import Base
@@ -57,3 +58,34 @@ async def test_setting_management(user_service):
 
     await user_service.unset_setting(user.id, "timezone")
     assert await user_service.get_setting(user.id, "timezone") is None
+
+
+@pytest.mark.asyncio
+async def test_google_credentials_multiple_accounts(user_service):
+    user = await user_service.create_user(username="multi")
+
+    await user_service.set_google_credentials(
+        user.id, "cred-personal", account="personal"
+    )
+    await user_service.set_google_credentials(user.id, "cred-work", account="work")
+
+    assert (
+        await user_service.get_google_credentials(user.id, account="personal")
+        == "cred-personal"
+    )
+    assert (
+        await user_service.get_google_credentials(user.id, account="work")
+        == "cred-work"
+    )
+    # Legacy column should remain empty
+    assert await user_service.get_google_credentials(user.id) is None
+
+    # Ensure two third-party account records exist
+    async with user_service._session_maker() as session:
+        from the_assistant.db.models import ThirdPartyAccount
+
+        result = await session.execute(
+            select(ThirdPartyAccount).where(ThirdPartyAccount.user_id == user.id)
+        )
+        accounts = result.scalars().all()
+        assert {a.account for a in accounts} == {"personal", "work"}

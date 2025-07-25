@@ -135,6 +135,9 @@ application will exit if it is missing.
 3. Enable Google Calendar API
 4. Create credentials (Service Account or OAuth 2.0)
 5. Download the JSON file and place it in `secrets/google.json`
+6. To authenticate multiple Google accounts, start the OAuth flow with an
+   `account` query parameter, for example `?account=personal` or
+   `?account=work`.
 
 ### Telegram Bot Setup
 
