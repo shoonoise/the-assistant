@@ -38,6 +38,13 @@ class DailyBriefing:
     async def run(self, user_id: int) -> None:
         accounts = ["personal", "work"]
 
+        settings = await workflow.execute_activity(
+            get_user_settings,
+            GetUserSettingsInput(user_id=user_id),
+            start_to_close_timeout=timedelta(seconds=10),
+            retry_policy=NO_RETRY,
+        )
+
         events = await workflow.execute_activity(
             get_upcoming_events_accounts,
             GetUpcomingEventsAccountsInput(
@@ -63,13 +70,6 @@ class DailyBriefing:
         weather = await workflow.execute_activity(
             get_weather_forecast,
             GetWeatherForecastInput(user_id=user_id),
-            start_to_close_timeout=timedelta(seconds=10),
-            retry_policy=NO_RETRY,
-        )
-
-        settings = await workflow.execute_activity(
-            get_user_settings,
-            GetUserSettingsInput(user_id=user_id),
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=NO_RETRY,
         )
