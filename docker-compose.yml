@@ -52,6 +52,7 @@ services:
     volumes:
       - ./obsidian_vault:/vault # Mount local vault
       - ./secrets:/secrets # Mount folder for file-based secrets
+      - ./src:/app/src # Mount local source code
     depends_on:
       - temporal
       - postgresql
@@ -66,6 +67,7 @@ services:
     volumes:
       - ./obsidian_vault:/vault # Mount local vault
       - ./secrets:/secrets # Mount folder for file-based secrets
+      - ./src:/app/src # Mount local source code
     depends_on:
       - temporal
       - postgresql
@@ -80,6 +82,7 @@ services:
     volumes:
       - ./obsidian_vault:/vault # Mount local vault
       - ./secrets:/secrets # Mount folder for file-based secrets
+      - ./src:/app/src # Mount local source code
     depends_on:
       - temporal
       - postgresql
