@@ -594,51 +594,98 @@ class GoogleClient:
         remaining = len(lines) - limit
         return "\n".join(lines[:limit]) + f"\n[...{remaining} lines left]"
 
-    def _extract_message_body(self, payload: dict[str, Any]) -> str:
-        """Extract plain text body from Gmail message payload."""
-        if not payload:
-            return ""
+    def _get_html_from_payload(self, payload) -> str:
+        """
+        Recursively parse Gmail message payload to extract the best available content.
 
-        html_body = ""
+        Gmail emails can have complex MIME structures:
+        - Single part: text/plain or text/html
+        - Multipart/alternative: contains both plain and HTML versions
+        - Multipart/mixed: contains text + attachments
+        - Nested multipart structures
 
+        Priority order: HTML > Plain text > Empty string
+        """
+        mime_type = payload.get("mimeType", "")
+        body_data = payload.get("body", {}).get("data")
+
+        # Handle single-part messages
+        if body_data:
+            try:
+                decoded_content = base64.urlsafe_b64decode(
+                    body_data.encode("ASCII")
+                ).decode("utf-8")
+
+                if mime_type == "text/html":
+                    return decoded_content
+                elif mime_type == "text/plain":
+                    # Convert plain text to basic HTML for consistent handling
+                    return f"<pre>{decoded_content}</pre>"
+
+            except (ValueError, UnicodeDecodeError) as e:
+                # Log decoding errors but continue processing
+                print(f"Failed to decode email content: {e}")
+
+        # Handle multipart messages
         if "parts" in payload:
-            for part in payload.get("parts", []):
-                mime = part.get("mimeType", "")
-                data = part.get("body", {}).get("data")
-                if not data:
-                    continue
-                try:
-                    decoded = base64.urlsafe_b64decode(data).decode(
-                        "utf-8", errors="ignore"
-                    )
-                except Exception:
-                    continue
-                if mime.startswith("text/plain"):
-                    return self._trim_lines(decoded)
-                if mime.startswith("text/html") and not html_body:
-                    html_body = decoded
+            html_content = ""
+            plain_content = ""
 
-        data = payload.get("body", {}).get("data")
-        if data:
-            try:
-                decoded = base64.urlsafe_b64decode(data).decode(
-                    "utf-8", errors="ignore"
-                )
-                if payload.get("mimeType", "").startswith("text/html"):
-                    html_body = decoded
-                else:
-                    return self._trim_lines(decoded)
-            except Exception:
-                return ""
+            for part in payload["parts"]:
+                part_mime = part.get("mimeType", "")
 
-        if html_body:
-            try:
-                plain = html2text.html2text(html_body)
-                return self._trim_lines(plain)
-            except Exception as e:
-                logger.warning(f"Failed to convert HTML to text: {e}")
+                # Recursively process nested multipart structures
+                if part_mime.startswith("multipart/"):
+                    nested_content = self._get_html_from_payload(part)
+                    if nested_content:
+                        # Prefer HTML content from nested parts
+                        if "<" in nested_content and ">" in nested_content:
+                            html_content = nested_content
+                        elif not html_content:
+                            plain_content = nested_content
+
+                # Process text parts directly
+                elif part_mime in ["text/html", "text/plain"]:
+                    part_data = part.get("body", {}).get("data")
+                    if part_data:
+                        try:
+                            decoded = base64.urlsafe_b64decode(
+                                part_data.encode("ASCII")
+                            ).decode("utf-8")
+
+                            if part_mime == "text/html":
+                                html_content = decoded
+                            elif part_mime == "text/plain" and not html_content:
+                                plain_content = f"<pre>{decoded}</pre>"
+
+                        except (ValueError, UnicodeDecodeError):
+                            continue
+
+            # Return best available content
+            if html_content:
+                return html_content
+            elif plain_content:
+                return plain_content
 
         return ""
+
+    def _extract_message_body(self, payload: dict[str, Any]) -> str:
+        html_body = self._get_html_from_payload(payload)
+        if not html_body:
+            logger.warn("No HTML part found, skipping.")
+            return ""
+
+        parser = html2text.HTML2Text()
+
+        parser.ignore_links = True
+        parser.single_line_break = True
+        parser.ignore_images = True
+        parser.ignore_mailto_links = True
+
+        plain = parser.handle(html_body).replace("\u200c", "").replace("\u00ad", "")
+
+        logger.info(f"HTML conversion completed, plain text length: {len(plain)}")
+        return self._trim_lines(plain)
 
     def _parse_gmail_message(
         self, raw_message: dict[str, Any], include_body: bool = False
