@@ -35,6 +35,15 @@ class CalendarEvent(BaseAssistantModel):
         default=None, description="Event creation time"
     )
     updated_time: datetime | None = Field(default=None, description="Last update time")
+    is_recurring: bool = Field(
+        default=False, description="Whether this event is part of a recurring series"
+    )
+    recurrence_rules: list[str] = Field(
+        default_factory=list, description="RRULE strings defining recurrence pattern"
+    )
+    recurring_event_id: str | None = Field(
+        default=None, description="ID of the recurring event series (if applicable)"
+    )
     raw_data: dict[str, Any] = Field(
         default_factory=dict, description="Original API response data"
     )
@@ -58,6 +67,44 @@ class CalendarEvent(BaseAssistantModel):
         """Check if the event is today."""
         today = datetime.now(self.start_time.tzinfo).date()
         return self.start_time.date() == today
+
+    @computed_field
+    @property
+    def recurrence_description(self) -> str:
+        """Get a human-readable description of the recurrence pattern."""
+        if not self.is_recurring or not self.recurrence_rules:
+            return ""
+
+        # Parse the first RRULE for basic description
+        rrule = self.recurrence_rules[0]
+        if not rrule.startswith("RRULE:"):
+            return rrule
+
+        # Extract frequency and interval from RRULE
+        parts = rrule[6:].split(";")  # Remove "RRULE:" prefix
+        freq_map = {
+            "DAILY": "daily",
+            "WEEKLY": "weekly",
+            "MONTHLY": "monthly",
+            "YEARLY": "yearly",
+        }
+
+        freq = None
+        interval = 1
+
+        for part in parts:
+            if part.startswith("FREQ="):
+                freq = freq_map.get(part[5:], part[5:].lower())
+            elif part.startswith("INTERVAL="):
+                interval = int(part[9:])
+
+        if not freq:
+            return "recurring"
+
+        if interval == 1:
+            return freq
+        else:
+            return f"every {interval} {freq.rstrip('ly')}{'ly' if freq.endswith('ly') else 's'}"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CalendarEvent":

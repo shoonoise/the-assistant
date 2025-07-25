@@ -217,8 +217,6 @@ class GoogleClient:
         if self._calendar_service is None:
             if not self._credentials:
                 self._credentials = await self.get_credentials()
-                if not self._credentials:
-                    raise GoogleAuthError("No valid credentials available")
 
             try:
                 self._calendar_service = build(
@@ -388,6 +386,20 @@ class GoogleClient:
             }
             attendees.append(attendee)
 
+        # Extract recurrence information
+        recurrence_rules = raw_event.get("recurrence", [])
+        is_recurring = bool(recurrence_rules)
+        recurring_event_id = raw_event.get("recurringEventId")
+
+        # Parse creation and update times
+        created_time = None
+        if "created" in raw_event:
+            created_time = self._parse_datetime_string(raw_event["created"])
+
+        updated_time = None
+        if "updated" in raw_event:
+            updated_time = self._parse_datetime_string(raw_event["updated"])
+
         return CalendarEvent(
             id=event_id,
             summary=summary,
@@ -398,6 +410,11 @@ class GoogleClient:
             calendar_id=calendar_id,
             attendees=attendees,
             is_all_day=is_all_day,
+            is_recurring=is_recurring,
+            recurrence_rules=recurrence_rules,
+            recurring_event_id=recurring_event_id,
+            created_time=created_time,
+            updated_time=updated_time,
             raw_data=raw_event,
             account=self.account,
         )
@@ -585,6 +602,57 @@ class GoogleClient:
             if fnmatch(address, p) or fnmatch(domain, p):
                 return True
         return False
+
+    async def get_event(
+        self, event_id: str, *, calendar_id: str = "primary"
+    ) -> CalendarEvent:
+        """Retrieve a single calendar event by ID."""
+
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+        self._credentials = credentials
+
+        try:
+            service = await self._get_calendar_service()
+            raw_event = await asyncio.to_thread(
+                service.events().get(calendarId=calendar_id, eventId=event_id).execute
+            )
+            return self._parse_calendar_event(raw_event, calendar_id)
+        except HttpError as e:
+            error_msg = f"Calendar API error: {e}"
+            logger.error(error_msg)
+            raise GoogleCalendarError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve calendar event {event_id}: {e}"
+            logger.error(error_msg)
+            raise GoogleCalendarError(error_msg) from e
+
+    async def get_email(self, email_id: str) -> GmailMessage:
+        """Retrieve a single Gmail message by ID including the full body."""
+
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+        self._credentials = credentials
+
+        try:
+            service = await self._get_gmail_service()
+            msg = await asyncio.to_thread(
+                service.users()
+                .messages()
+                .get(userId="me", id=email_id, format="full")
+                .execute
+            )
+            return self._parse_gmail_message(msg, include_body=True)
+        except HttpError as e:
+            error_msg = f"Gmail API error: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve gmail message {email_id}: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
 
     def _trim_lines(self, text: str, limit: int = 50) -> str:
         """Trim long text to a limited number of lines."""
