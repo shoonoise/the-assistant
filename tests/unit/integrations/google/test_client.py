@@ -532,6 +532,55 @@ class TestGoogleClient:
             call_args = mock_messages.list.call_args[1]
             assert "in:inbox" in call_args["q"]
 
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_event(self, mock_build, mock_credentials):
+        """Fetch single calendar event."""
+        mock_service = MagicMock()
+        mock_events = MagicMock()
+        mock_get = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.events.return_value = mock_events
+        mock_events.get.return_value = mock_get
+        mock_get.execute.return_value = {"id": "e1", "summary": "s"}
+
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            event = await client.get_event("e1")
+
+            assert event.id == "e1"
+            mock_events.get.assert_called_once_with(calendarId="primary", eventId="e1")
+
+    @patch("the_assistant.integrations.google.client.build")
+    async def test_get_email(self, mock_build, mock_credentials):
+        """Fetch single Gmail message."""
+        mock_service = MagicMock()
+        mock_users = MagicMock()
+        mock_messages = MagicMock()
+        mock_get = MagicMock()
+
+        mock_build.return_value = mock_service
+        mock_service.users.return_value = mock_users
+        mock_users.messages.return_value = mock_messages
+        mock_messages.get.return_value = mock_get
+        mock_get.execute.return_value = {
+            "id": "m1",
+            "payload": {"headers": []},
+        }
+
+        client = GoogleClient(user_id=1)
+        with patch.object(
+            client, "get_credentials", new_callable=AsyncMock
+        ) as mock_get_credentials:
+            mock_get_credentials.return_value = mock_credentials
+            email = await client.get_email("m1")
+
+            assert email.id == "m1"
+            mock_messages.get.assert_called_once()
+
 
 def test_extract_message_body_html_conversion():
     """HTML bodies are converted to plain text and trimmed."""

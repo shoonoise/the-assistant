@@ -586,6 +586,57 @@ class GoogleClient:
                 return True
         return False
 
+    async def get_event(
+        self, event_id: str, *, calendar_id: str = "primary"
+    ) -> CalendarEvent:
+        """Retrieve a single calendar event by ID."""
+
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+        self._credentials = credentials
+
+        try:
+            service = await self._get_calendar_service()
+            raw_event = (
+                service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+            )
+            return self._parse_calendar_event(raw_event, calendar_id)
+        except HttpError as e:
+            error_msg = f"Calendar API error: {e}"
+            logger.error(error_msg)
+            raise GoogleCalendarError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve calendar event {event_id}: {e}"
+            logger.error(error_msg)
+            raise GoogleCalendarError(error_msg) from e
+
+    async def get_email(self, email_id: str) -> GmailMessage:
+        """Retrieve a single Gmail message by ID including the full body."""
+
+        credentials = await self.get_credentials()
+        if not credentials:
+            raise GoogleAuthError("No valid credentials available")
+        self._credentials = credentials
+
+        try:
+            service = await self._get_gmail_service()
+            msg = (
+                service.users()
+                .messages()
+                .get(userId="me", id=email_id, format="full")
+                .execute()
+            )
+            return self._parse_gmail_message(msg, include_body=True)
+        except HttpError as e:
+            error_msg = f"Gmail API error: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+        except Exception as e:  # pragma: no cover - unexpected
+            error_msg = f"Failed to retrieve gmail message {email_id}: {e}"
+            logger.error(error_msg)
+            raise GoogleGmailError(error_msg) from e
+
     def _trim_lines(self, text: str, limit: int = 50) -> str:
         """Trim long text to a limited number of lines."""
         lines = text.splitlines()
