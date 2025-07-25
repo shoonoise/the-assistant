@@ -559,7 +559,7 @@ async def select_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not update.message:
         return ConversationHandler.END
 
-    choice = update.message.text.strip()
+    choice = update.message.text.strip()  # type: ignore[possibly-unbound-attribute]
     if choice not in SETTINGS_LABEL_MAP:
         await update.message.reply_text(
             "Use the buttons to pick one of the available options."
@@ -582,7 +582,7 @@ async def save_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if not update.message or not update.effective_user:
         return ConversationHandler.END
 
-    value = update.message.text.strip()
+    value = update.message.text.strip()  # type: ignore[possibly-unbound-attribute]
     user_data = cast(dict[str, Any], context.user_data)
     setting_key = cast(SettingKey | None, user_data.get("setting_key"))
     setting_label = cast(str | None, user_data.get("setting_label")) or setting_key

@@ -556,7 +556,7 @@ class GoogleClient:
             logger.error(error_msg)
             raise GoogleGmailError(error_msg) from e
 
-    def _trim_lines(self, text: str, limit: int = 200) -> str:
+    def _trim_lines(self, text: str, limit: int = 50) -> str:
         """Trim long text to a limited number of lines."""
         lines = text.splitlines()
         if len(lines) <= limit:

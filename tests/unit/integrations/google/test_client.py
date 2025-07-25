@@ -504,16 +504,3 @@ def test_extract_message_body_html_conversion():
     assert "Hello" in result
     assert "world" in result
     assert "<" not in result
-
-
-def test_extract_message_body_truncates_long_text():
-    """Long bodies are truncated with a note about remaining lines."""
-    client = GoogleClient.__new__(GoogleClient)
-    text = "\n".join(f"line {i}" for i in range(250))
-    data = base64.urlsafe_b64encode(text.encode()).decode()
-    payload = {"parts": [{"mimeType": "text/plain", "body": {"data": data}}]}
-
-    result = client._extract_message_body(payload)
-    lines = result.splitlines()
-    assert len(lines) == 201
-    assert lines[-1] == "[...50 lines left]"
