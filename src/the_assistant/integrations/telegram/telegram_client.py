@@ -5,8 +5,14 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Any, cast
 
-from telegram import Bot, Update
+from telegram import (
+    Bot,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.error import (
     BadRequest,
@@ -21,6 +27,7 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     filters,
 )
@@ -31,6 +38,8 @@ from the_assistant.db import get_user_service
 from the_assistant.integrations.google.client import GoogleClient
 from the_assistant.integrations.google.oauth_state import create_state_jwt
 from the_assistant.settings import get_settings
+
+from .constants import SETTINGS_LABEL_MAP, ConversationState, SettingKey
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +67,7 @@ class TelegramClient:
         self._command_handlers: dict[
             str, Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
         ] = {}
+        self._extra_handlers: list[ConversationHandler] = []
 
         logger.info(f"Telegram client initialized for user_id: {user_id}")
 
@@ -209,6 +219,12 @@ class TelegramClient:
         self._command_handlers[command] = handler
         logger.info(f"Registered handler for command: /{command}")
 
+    async def register_handler(self, handler: ConversationHandler) -> None:
+        """Register a generic Telegram handler."""
+
+        self._extra_handlers.append(handler)
+        logger.info("Registered additional handler")
+
     async def _handle_unknown_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -241,8 +257,8 @@ class TelegramClient:
 
         error_message += "\nUse /help for more detailed information about each command."
 
-        # Send the error message
-        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
+        # Send the error message without markdown to avoid parsing issues
+        await update.message.reply_text(error_message)
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -265,7 +281,12 @@ class TelegramClient:
             self.application.add_handler(CommandHandler(command, handler))
             logger.info(f"Added handler for command: /{command}")
 
-        # Add handler for unknown commands
+        # Register additional handlers such as conversations BEFORE unknown command handler
+        for handler in self._extra_handlers:
+            self.application.add_handler(handler)
+            logger.info("Added additional handler")
+
+        # Add handler for unknown commands (must be last to catch unhandled commands)
         self.application.add_handler(
             MessageHandler(
                 filters.COMMAND & ~filters.UpdateType.EDITED_MESSAGE,
@@ -511,6 +532,97 @@ async def handle_settings_command(
     logger.info(f"Sent settings to user {user_id}")
 
 
+async def start_update_settings(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Start the settings update conversation."""
+
+    if not update.message:
+        return ConversationHandler.END
+
+    keyboard = [
+        ["How to greet", "Briefing time"],
+        ["About me", "Location"],
+    ]
+    await update.message.reply_text(
+        "Please choose which setting you want to update:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ConversationState.SELECT_SETTING
+
+
+async def select_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the user's setting choice."""
+
+    if not update.message:
+        return ConversationHandler.END
+
+    choice = update.message.text.strip()
+    if choice not in SETTINGS_LABEL_MAP:
+        await update.message.reply_text(
+            "Use the buttons to pick one of the available options."
+        )
+        return ConversationState.SELECT_SETTING
+
+    user_data = cast(dict[str, Any], context.user_data)
+    user_data["setting_key"] = SETTINGS_LABEL_MAP[choice]
+    user_data["setting_label"] = choice
+    await update.message.reply_text(
+        f"Enter the new value for '{choice}':",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return ConversationState.ENTER_VALUE
+
+
+async def save_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Save the provided setting value."""
+
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    value = update.message.text.strip()
+    user_data = cast(dict[str, Any], context.user_data)
+    setting_key = cast(SettingKey | None, user_data.get("setting_key"))
+    setting_label = cast(str | None, user_data.get("setting_label")) or setting_key
+
+    if setting_key is None:
+        return ConversationHandler.END
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        raise ValueError("User not registered")
+
+    if setting_key is SettingKey.GREET and not value:
+        value = "first_name"
+
+    await user_service.set_setting(user.id, setting_key.value, value)
+
+    await update.message.reply_text(
+        f"{setting_label} updated to: {value}", reply_markup=ReplyKeyboardRemove()
+    )
+
+    user_data.pop("setting_key", None)
+    user_data.pop("setting_label", None)
+
+    return ConversationHandler.END
+
+
+async def cancel_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the settings update conversation."""
+
+    if update.message:
+        await update.message.reply_text(
+            "Settings update cancelled.", reply_markup=ReplyKeyboardRemove()
+        )
+    user_data = cast(dict[str, Any], context.user_data)
+    user_data.pop("setting_key", None)
+    user_data.pop("setting_label", None)
+    return ConversationHandler.END
+
+
 async def handle_google_auth_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -579,5 +691,20 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("briefing", handle_briefing_command)
     await client.register_command_handler("settings", handle_settings_command)
     await client.register_command_handler("google_auth", handle_google_auth_command)
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("update_settings", start_update_settings)],
+        states={
+            ConversationState.SELECT_SETTING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_setting)
+            ],
+            ConversationState.ENTER_VALUE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_setting)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_update)],
+    )
+
+    await client.register_handler(conv_handler)
 
     return client
