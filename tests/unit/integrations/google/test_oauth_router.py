@@ -31,7 +31,7 @@ async def test_oauth_callback_sends_notification():
         google_oauth_redirect_uri="http://redir",
         jwt_secret="secret",
     )
-    state = oauth_router.create_state_jwt(user.id, settings)
+    state = oauth_router.create_state_jwt(user.id, settings, account="work")
 
     with (
         patch(
@@ -41,7 +41,7 @@ async def test_oauth_callback_sends_notification():
         patch(
             "the_assistant.integrations.google.oauth_router.GoogleClient",
             return_value=google_client,
-        ),
+        ) as google_client_cls,
         patch(
             "the_assistant.integrations.google.oauth_router.TelegramClient",
             return_value=telegram_client,
@@ -55,6 +55,8 @@ async def test_oauth_callback_sends_notification():
         )
 
     google_client.exchange_code.assert_awaited_once_with("code")
+    # Ensure GoogleClient was instantiated with the account from the state
+    google_client_cls.assert_called_with(user_id=user.id, account="work")
     telegram_client.send_message.assert_awaited_once_with(
         text="✅ Google authentication successful!"
     )

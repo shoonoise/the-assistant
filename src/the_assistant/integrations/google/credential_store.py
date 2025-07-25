@@ -36,14 +36,22 @@ class CredentialStore(ABC):
 class PostgresCredentialStore(CredentialStore):
     """Credential store backed by :class:`UserService`."""
 
-    def __init__(self, encryption_key: str, user_service: UserService | None = None):
+    def __init__(
+        self,
+        encryption_key: str,
+        user_service: UserService | None = None,
+        account: str | None = None,
+    ):
         self.encryption_key = encryption_key
         self.fernet = Fernet(encryption_key.encode())
         self.user_service = user_service or get_user_service()
+        self.account = account
 
     async def get(self, user_id: int) -> Credentials | None:
         """Get credentials for a user."""
-        enc = await self.user_service.get_google_credentials(user_id)
+        enc = await self.user_service.get_google_credentials(
+            user_id, account=self.account
+        )
 
         if not enc:
             logger.info(f"No credentials found for user {user_id}")
@@ -74,10 +82,14 @@ class PostgresCredentialStore(CredentialStore):
         creds_json = json.dumps(creds_dict)
         encrypted_data = self.fernet.encrypt(creds_json.encode()).decode()
 
-        await self.user_service.set_google_credentials(user_id, encrypted_data)
+        await self.user_service.set_google_credentials(
+            user_id, encrypted_data, account=self.account
+        )
         logger.info(f"Saved credentials for user {user_id}")
 
     async def delete(self, user_id: int) -> None:
         """Delete credentials for a user."""
-        await self.user_service.set_google_credentials(user_id, None)
+        await self.user_service.set_google_credentials(
+            user_id, None, account=self.account
+        )
         logger.info(f"Deleted credentials for user {user_id}")

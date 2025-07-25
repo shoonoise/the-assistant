@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .models import User, UserSetting
+from .models import ThirdPartyAccount, User, UserSetting
 
 
 class UserService:
@@ -39,10 +39,68 @@ class UserService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def set_google_credentials(
-        self, user_id: int, credentials_enc: str | None
+    async def _set_third_party_credentials(
+        self,
+        user_id: int,
+        provider: str,
+        credentials_enc: str | None,
+        account: str | None,
     ) -> None:
-        """Store encrypted Google credentials for a user."""
+        """Create or update credentials for an external account."""
+        async with self._session_maker() as session:
+            stmt = select(ThirdPartyAccount).where(
+                ThirdPartyAccount.user_id == user_id,
+                ThirdPartyAccount.provider == provider,
+                ThirdPartyAccount.account == account,
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
+            if record:
+                record.credentials_enc = credentials_enc
+                record.creds_updated_at = datetime.now(UTC) if credentials_enc else None
+            else:
+                record = ThirdPartyAccount(
+                    user_id=user_id,
+                    provider=provider,
+                    account=account,
+                    credentials_enc=credentials_enc,
+                    creds_updated_at=(datetime.now(UTC) if credentials_enc else None),
+                )
+                session.add(record)
+            await session.commit()
+
+    async def _get_third_party_credentials(
+        self, user_id: int, provider: str, account: str | None
+    ) -> str | None:
+        """Return credentials for an external account."""
+        async with self._session_maker() as session:
+            stmt = select(ThirdPartyAccount.credentials_enc).where(
+                ThirdPartyAccount.user_id == user_id,
+                ThirdPartyAccount.provider == provider,
+                ThirdPartyAccount.account == account,
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def set_google_credentials(
+        self,
+        user_id: int,
+        credentials_enc: str | None,
+        account: str | None = None,
+    ) -> None:
+        """Store encrypted Google credentials for a user.
+
+        When ``account`` is provided the credentials are stored in the
+        ``third_party_accounts`` table with provider ``"google"``. The original
+        ``users.google_credentials_enc`` column is still used when ``account`` is
+        ``None`` for backwards compatibility.
+        """
+        if account:
+            await self._set_third_party_credentials(
+                user_id, "google", credentials_enc, account
+            )
+            return
+
         async with self._session_maker() as session:
             user = await session.get(User, user_id)
             if user is None:
@@ -53,8 +111,13 @@ class UserService:
             )
             await session.commit()
 
-    async def get_google_credentials(self, user_id: int) -> str | None:
+    async def get_google_credentials(
+        self, user_id: int, account: str | None = None
+    ) -> str | None:
         """Return encrypted Google credentials for a user."""
+        if account:
+            return await self._get_third_party_credentials(user_id, "google", account)
+
         async with self._session_maker() as session:
             user = await session.get(User, user_id)
             return user.google_credentials_enc if user else None

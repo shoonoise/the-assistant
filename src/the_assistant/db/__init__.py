@@ -7,7 +7,7 @@ from .database import (
     get_session_maker,
     get_user_service,
 )
-from .models import Base, User, UserSetting
+from .models import Base, ThirdPartyAccount, User, UserSetting
 from .service import UserService
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "DatabaseManager",
     "User",
     "UserSetting",
+    "ThirdPartyAccount",
     "UserService",
     "get_database_manager",
     "get_session",

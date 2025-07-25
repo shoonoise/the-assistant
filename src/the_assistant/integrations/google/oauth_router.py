@@ -21,21 +21,26 @@ router = APIRouter(prefix="/google", tags=["google"])
 
 def get_credential_store(
     settings: Settings = Depends(get_settings),
+    account: str | None = Query(None, description="Google account identifier"),
 ) -> PostgresCredentialStore:
     """Dependency to get credential store."""
-    return PostgresCredentialStore(encryption_key=settings.db_encryption_key)
+    return PostgresCredentialStore(
+        encryption_key=settings.db_encryption_key, account=account
+    )
 
 
 def get_google_client(
     user_id: int = Query(..., description="User ID"),
+    account: str | None = Query(None, description="Google account identifier"),
 ) -> GoogleClient:
     """Dependency to get Google client for a user."""
-    return GoogleClient(user_id=user_id)
+    return GoogleClient(user_id=user_id, account=account)
 
 
 @router.get("/auth")
 async def begin_google_auth(
     user_id: int = Query(..., description="User ID"),
+    account: str | None = Query(None, description="Google account identifier"),
     client: GoogleClient = Depends(get_google_client),
     settings: Settings = Depends(get_settings),
 ):
@@ -50,7 +55,7 @@ async def begin_google_auth(
             return {"message": "User already authenticated", "authenticated": True}
 
         # Generate authorization URL with state
-        state = create_state_jwt(user_id, settings)
+        state = create_state_jwt(user_id, settings, account=account)
         auth_url = await client.generate_auth_url(state)
 
         return {
@@ -88,7 +93,7 @@ async def google_oauth_callback(
             )
 
         # Parse state token
-        user_id = parse_state_jwt(state, settings)
+        user_id, account = parse_state_jwt(state, settings)
         if not user_id:
             logger.error("Invalid or expired state token")
             return RedirectResponse(
@@ -96,7 +101,7 @@ async def google_oauth_callback(
             )
 
         # Get client for this user
-        client = GoogleClient(user_id=user_id)
+        client = GoogleClient(user_id=user_id, account=account)
 
         # Exchange code for credentials
         await client.exchange_code(code)
@@ -134,6 +139,7 @@ async def google_oauth_callback(
 @router.get("/status")
 async def check_auth_status(
     user_id: int = Query(..., description="User ID"),
+    account: str | None = Query(None, description="Google account identifier"),
     client: GoogleClient = Depends(get_google_client),
 ):
     """Check if user is authenticated with Google."""
@@ -150,6 +156,7 @@ async def check_auth_status(
 @router.delete("/revoke")
 async def revoke_google_auth(
     user_id: int = Query(..., description="User ID"),
+    account: str | None = Query(None, description="Google account identifier"),
     credential_store: PostgresCredentialStore = Depends(get_credential_store),
 ):
     """Revoke Google authentication for a user."""

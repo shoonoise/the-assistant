@@ -45,6 +45,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    third_party_accounts: Mapped[list["ThirdPartyAccount"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserSetting(Base):
@@ -68,3 +72,27 @@ class UserSetting(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="settings")
+
+
+class ThirdPartyAccount(Base):
+    """External account credentials for a user."""
+
+    __tablename__ = "third_party_accounts"
+    __table_args__ = (UniqueConstraint("user_id", "provider", "account"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    account: Mapped[str | None] = mapped_column(String)
+    credentials_enc: Mapped[str | None] = mapped_column(Text)
+    creds_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    user: Mapped[User] = relationship(back_populates="third_party_accounts")
