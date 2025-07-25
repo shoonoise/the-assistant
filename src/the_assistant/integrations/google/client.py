@@ -540,7 +540,7 @@ class GoogleClient:
             list_kwargs = {
                 "userId": "me",
                 "maxResults": max_results,
-                "q": "is:important in:inbox",
+                "q": "in:inbox",
             }
             messages_result = service.users().messages().list(**list_kwargs).execute()
             total = int(messages_result.get("resultSizeEstimate", 0))

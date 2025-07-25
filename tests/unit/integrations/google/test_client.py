@@ -530,7 +530,7 @@ class TestGoogleClient:
             assert total == 1
             assert len(emails) == 1
             call_args = mock_messages.list.call_args[1]
-            assert "is:important" in call_args["q"]
+            assert "in:inbox" in call_args["q"]
 
 
 def test_extract_message_body_html_conversion():
