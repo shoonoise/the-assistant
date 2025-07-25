@@ -312,6 +312,7 @@ class TestEmailActivities:
                 snippet="hi",
                 subject="Hello",
                 sender="sender@example.com",
+                body="Body",
             )
         ]
 
@@ -377,6 +378,7 @@ class TestMessagesActivities:
             snippet="snippet",
             subject="Subject",
             sender="sender@example.com",
+            body="Body",
         )
 
         text = await build_daily_briefing(

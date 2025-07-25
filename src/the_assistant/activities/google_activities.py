@@ -55,6 +55,20 @@ class GetEmailsInput:
     max_results: int = 5
 
 
+@dataclass
+class GetImportantEmailsInput:
+    user_id: int
+    max_full: int = 10
+    max_snippets: int = 10
+
+
+@dataclass
+class ImportantEmailsResult:
+    emails_full: list[GmailMessage]
+    emails_snippets: list[GmailMessage]
+    total: int
+
+
 def get_google_client(user_id: int) -> GoogleClient:
     """Get a configured Google client for the user."""
 
@@ -212,3 +226,31 @@ async def get_emails(input: GetEmailsInput) -> list[GmailMessage]:
 
     logger.info(f"Retrieved {len(emails)} emails")
     return emails
+
+
+@activity.defn
+async def get_important_emails(
+    input: GetImportantEmailsInput,
+) -> ImportantEmailsResult:
+    """Retrieve important Gmail messages with total inbox count."""
+    logger.info(f"Fetching important emails for user {input.user_id}")
+
+    client = get_google_client(input.user_id)
+
+    if not await client.is_authenticated():
+        raise ValueError(f"User {input.user_id} is not authenticated with Google")
+
+    emails, total = await client.get_important_emails(
+        max_results=input.max_full + input.max_snippets,
+        include_body=True,
+    )
+
+    emails_full = emails[: input.max_full]
+    emails_snippets = emails[input.max_full : input.max_full + input.max_snippets]
+
+    logger.info("Retrieved %s important emails (total %s)", len(emails), total)
+    return ImportantEmailsResult(
+        emails_full=emails_full,
+        emails_snippets=emails_snippets,
+        total=total,
+    )
