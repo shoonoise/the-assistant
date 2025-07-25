@@ -291,9 +291,8 @@ async def get_upcoming_events_accounts(
 ) -> list[CalendarEvent]:
     """Fetch upcoming events for multiple accounts."""
 
-    events: list[CalendarEvent] = []
-    for account in input.accounts:
-        result = await get_upcoming_events(
+    tasks = [
+        get_upcoming_events(
             GetUpcomingEventsInput(
                 user_id=input.user_id,
                 days_ahead=input.days_ahead,
@@ -301,7 +300,10 @@ async def get_upcoming_events_accounts(
                 account=account,
             )
         )
-        events.extend(result)
+        for account in input.accounts
+    ]
+    events = await asyncio.gather(*tasks)
+    return [event for sublist in events for event in sublist]
 
     return events
 
