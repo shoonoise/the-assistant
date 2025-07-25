@@ -388,6 +388,20 @@ class GoogleClient:
             }
             attendees.append(attendee)
 
+        # Extract recurrence information
+        recurrence_rules = raw_event.get("recurrence", [])
+        is_recurring = bool(recurrence_rules)
+        recurring_event_id = raw_event.get("recurringEventId")
+
+        # Parse creation and update times
+        created_time = None
+        if "created" in raw_event:
+            created_time = self._parse_datetime_string(raw_event["created"])
+
+        updated_time = None
+        if "updated" in raw_event:
+            updated_time = self._parse_datetime_string(raw_event["updated"])
+
         return CalendarEvent(
             id=event_id,
             summary=summary,
@@ -398,6 +412,11 @@ class GoogleClient:
             calendar_id=calendar_id,
             attendees=attendees,
             is_all_day=is_all_day,
+            is_recurring=is_recurring,
+            recurrence_rules=recurrence_rules,
+            recurring_event_id=recurring_event_id,
+            created_time=created_time,
+            updated_time=updated_time,
             raw_data=raw_event,
             account=self.account,
         )

@@ -44,6 +44,96 @@ def test_calendar_event_properties():
     assert event.is_today is True  # Since start_time is today
 
 
+def test_calendar_event_recurrence():
+    """Test CalendarEvent recurrence properties."""
+    future_time = datetime.now(UTC) + timedelta(minutes=30)
+
+    # Test non-recurring event
+    non_recurring = CalendarEvent(
+        id="event1",
+        summary="One-time Meeting",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+    )
+    assert non_recurring.is_recurring is False
+    assert non_recurring.recurrence_description == ""
+    assert non_recurring.recurring_event_id is None
+
+    # Test weekly recurring event
+    weekly_recurring = CalendarEvent(
+        id="event2",
+        summary="Weekly Standup",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=WEEKLY;INTERVAL=1"],
+        recurring_event_id="recurring123",
+    )
+    assert weekly_recurring.is_recurring is True
+    assert weekly_recurring.recurrence_description == "weekly"
+    assert weekly_recurring.recurring_event_id == "recurring123"
+
+    # Test daily recurring event
+    daily_recurring = CalendarEvent(
+        id="event3",
+        summary="Daily Standup",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=DAILY"],
+    )
+    assert daily_recurring.is_recurring is True
+    assert daily_recurring.recurrence_description == "daily"
+
+    # Test bi-weekly recurring event
+    biweekly_recurring = CalendarEvent(
+        id="event4",
+        summary="Bi-weekly Review",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=WEEKLY;INTERVAL=2"],
+    )
+    assert biweekly_recurring.is_recurring is True
+    assert biweekly_recurring.recurrence_description == "every 2 weekly"
+
+    # Test monthly recurring event
+    monthly_recurring = CalendarEvent(
+        id="event5",
+        summary="Monthly Review",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=MONTHLY;INTERVAL=1"],
+    )
+    assert monthly_recurring.is_recurring is True
+    assert monthly_recurring.recurrence_description == "monthly"
+
+    # Test yearly recurring event
+    yearly_recurring = CalendarEvent(
+        id="event6",
+        summary="Annual Review",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=YEARLY"],
+    )
+    assert yearly_recurring.is_recurring is True
+    assert yearly_recurring.recurrence_description == "yearly"
+
+    # Test invalid/unknown recurrence rule
+    unknown_recurring = CalendarEvent(
+        id="event7",
+        summary="Unknown Recurrence",
+        start_time=future_time,
+        end_time=future_time + timedelta(hours=1),
+        is_recurring=True,
+        recurrence_rules=["RRULE:FREQ=UNKNOWN"],
+    )
+    assert unknown_recurring.is_recurring is True
+    assert unknown_recurring.recurrence_description == "unknown"
+
+
 def test_task_item_properties():
     """Test TaskItem model properties."""
     # Create task items with different indentation levels
