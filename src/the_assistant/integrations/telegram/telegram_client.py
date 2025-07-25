@@ -14,14 +14,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ParseMode
-from telegram.error import (
-    BadRequest,
-    Forbidden,
-    NetworkError,
-    RetryAfter,
-    TelegramError,
-    TimedOut,
-)
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -85,93 +78,16 @@ class TelegramClient:
             logger.error(f"Failed to validate bot token: {e}")
             return False
 
-    async def _respect_rate_limit(self, e: Exception) -> bool:
-        """Handle rate limiting from the Telegram API.
-
-        Args:
-            e: The exception that occurred.
-
-        Returns:
-            bool: True if rate limiting was handled, False otherwise.
-        """
-        if isinstance(e, RetryAfter):
-            wait_time = e.retry_after
-            # Convert timedelta to seconds if needed
-            if hasattr(wait_time, "total_seconds") and callable(
-                wait_time.total_seconds
-            ):
-                wait_seconds = float(wait_time.total_seconds())
-            else:
-                wait_seconds = float(wait_time)
-            logger.warning(
-                f"Rate limited by Telegram API. Waiting for {wait_seconds} seconds"
-            )
-            await asyncio.sleep(wait_seconds)
-            return True
-        return False
-
-    async def _handle_message_error(
-        self, e: Exception, chat_id: int, retry_count: int = 0
-    ) -> bool:
-        """Handle errors that occur when sending messages.
-
-        Args:
-            e: The exception that occurred.
-            chat_id: The chat ID where the message was being sent.
-            retry_count: The current retry count.
-
-        Returns:
-            bool: True if the error was handled and the operation should be retried,
-                False if the error is terminal.
-        """
-        max_retries = 3
-
-        # First check for rate limiting
-        if await self._respect_rate_limit(e):
-            return True
-
-        # Check for specific error types first (more specific before general)
-        if isinstance(e, BadRequest):
-            logger.error(f"Bad request when sending message to {chat_id}: {e}")
-            return False
-
-        elif isinstance(e, Forbidden):
-            logger.error(
-                f"Bot was blocked by user {chat_id} or doesn't have permission: {e}"
-            )
-            return False
-
-        elif isinstance(e, NetworkError) or isinstance(e, TimedOut):
-            if retry_count < max_retries:
-                wait_time = 2**retry_count  # Exponential backoff
-                logger.warning(
-                    f"Network error when sending message to {chat_id}. "
-                    f"Retrying in {wait_time} seconds. Error: {e}"
-                )
-                await asyncio.sleep(wait_time)
-                return True
-            else:
-                logger.error(
-                    f"Failed to send message to {chat_id} after {max_retries} retries: {e}"
-                )
-                return False
-
-        else:
-            logger.error(f"Unexpected error when sending message to {chat_id}: {e}")
-            return False
-
     async def send_message(
         self,
         text: str,
         parse_mode: str = ParseMode.MARKDOWN,
-        retry_count: int = 0,
     ) -> bool:
         """Send a text message to the user's chat.
 
         Args:
             text: The text message to send.
             parse_mode: The parse mode to use for the message.
-            retry_count: The current retry count (used internally for retries).
 
         Returns:
             bool: True if the message was sent successfully, False otherwise.
@@ -200,10 +116,8 @@ class TelegramClient:
             return True
 
         except Exception as e:
-            should_retry = await self._handle_message_error(e, chat_id, retry_count)
-            if should_retry:
-                return await self.send_message(text, parse_mode, retry_count + 1)
-            return False
+            logger.error(f"Failed to send message to {chat_id}: {e}")
+            raise
 
     async def register_command_handler(
         self,
