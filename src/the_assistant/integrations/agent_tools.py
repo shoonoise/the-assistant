@@ -10,8 +10,13 @@ async def _send_message(user_id: int, text: str) -> str:
     return "Message sent"
 
 
-async def _get_event(user_id: int, event_id: str, calendar_id: str = "primary") -> dict:
-    client = GoogleClient(user_id=user_id)
+async def _get_event(
+    user_id: int,
+    event_id: str,
+    calendar_id: str = "primary",
+    account: str | None = None,
+) -> dict:
+    client = GoogleClient(user_id=user_id, account=account)
     event = await client.get_event(event_id=event_id, calendar_id=calendar_id)
     return event.model_dump()
 
@@ -31,9 +36,11 @@ def get_default_tools(user_id: int) -> list[BaseTool]:
         return await _send_message(user_id, text)
 
     @tool
-    async def get_event(event_id: str, calendar_id: str = "primary") -> dict:
+    async def get_event(
+        event_id: str, calendar_id: str = "primary", account: str | None = None
+    ) -> dict:
         """Get a Google Calendar event by ID."""
-        return await _get_event(user_id, event_id, calendar_id)
+        return await _get_event(user_id, event_id, calendar_id, account)
 
     @tool
     async def get_email(email_id: str, account: str | None = None) -> dict:
