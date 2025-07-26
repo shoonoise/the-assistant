@@ -17,7 +17,6 @@ from the_assistant.integrations.telegram.telegram_client import (
     handle_ignore_email_command,
     handle_memory_add_command,
     handle_memory_command,
-    handle_memory_delete_command,
     save_setting,
     start_update_settings,
 )
@@ -572,7 +571,13 @@ class TestUpdateSettings:
             return_value=user_service,
         ):
             mock_context.args = ["1"]
-            await handle_memory_delete_command(mock_update, mock_context)
+            # Use start_memory_delete instead of handle_memory_delete_command
+            # since the latter is now just a stub
+            from the_assistant.integrations.telegram.telegram_client import (
+                start_memory_delete,
+            )
+
+            await start_memory_delete(mock_update, mock_context)
 
         assert user_service.set_setting.await_count == 1
         args = user_service.set_setting.call_args[0]
