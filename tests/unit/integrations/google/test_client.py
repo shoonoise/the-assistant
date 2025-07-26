@@ -379,6 +379,7 @@ class TestGoogleClient:
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
             emails = await client.get_emails(
+                query=None,
                 unread_only=True,
                 sender="sender@example.com",
                 ignored_senders=None,
@@ -428,7 +429,7 @@ class TestGoogleClient:
             client, "get_credentials", new_callable=AsyncMock
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
-            emails = await client.get_emails(ignored_senders=["*@news.com"])
+            emails = await client.get_emails(query=None, ignored_senders=["*@news.com"])
 
             assert emails == []
 
@@ -454,7 +455,7 @@ class TestGoogleClient:
         ) as mock_get_credentials:
             mock_get_credentials.return_value = mock_credentials
             with pytest.raises(GoogleGmailError, match="Gmail API error"):
-                await client.get_emails(ignored_senders=None)
+                await client.get_emails(query=None, ignored_senders=None)
 
     async def test_get_emails_not_authenticated(self):
         """Test Gmail retrieval when not authenticated."""
@@ -465,7 +466,7 @@ class TestGoogleClient:
             mock_get_credentials.return_value = None
 
             with pytest.raises(GoogleAuthError, match="No valid credentials available"):
-                await client.get_emails(ignored_senders=None)
+                await client.get_emails(query=None, ignored_senders=None)
 
     @patch("the_assistant.integrations.google.client.build")
     async def test_get_events_by_date(self, mock_build, mock_credentials):
@@ -492,45 +493,6 @@ class TestGoogleClient:
             call_args = mock_events.list.call_args[1]
             assert "timeMin" in call_args
             assert "timeMax" in call_args
-
-    @patch("the_assistant.integrations.google.client.build")
-    async def test_get_important_emails(self, mock_build, mock_credentials):
-        """Test retrieval of important emails."""
-        mock_service = MagicMock()
-        mock_users = MagicMock()
-        mock_messages = MagicMock()
-        mock_list = MagicMock()
-        mock_get = MagicMock()
-
-        mock_build.return_value = mock_service
-        mock_service.users.return_value = mock_users
-        mock_users.messages.return_value = mock_messages
-        mock_messages.list.return_value = mock_list
-        mock_list.execute.return_value = {
-            "messages": [{"id": "m1"}],
-            "resultSizeEstimate": 1,
-        }
-        mock_messages.get.return_value = mock_get
-        mock_get.execute.return_value = {
-            "id": "m1",
-            "threadId": "t1",
-            "snippet": "hi",
-            "payload": {"headers": []},
-        }
-
-        client = GoogleClient(user_id=1)
-        with patch.object(
-            client, "get_credentials", new_callable=AsyncMock
-        ) as mock_get_credentials:
-            mock_get_credentials.return_value = mock_credentials
-            emails, total = await client.get_important_emails(
-                max_results=5, ignored_senders=None
-            )
-
-            assert total == 1
-            assert len(emails) == 1
-            call_args = mock_messages.list.call_args[1]
-            assert "in:inbox" in call_args["q"]
 
     @patch("the_assistant.integrations.google.client.build")
     async def test_get_event(self, mock_build, mock_credentials):
