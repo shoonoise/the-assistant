@@ -25,6 +25,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.helpers import escape_markdown
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
@@ -49,6 +50,9 @@ COMMAND_REGISTRY: dict[str, str] = {
     "ignore_email": "Add an email pattern to ignore list",
     "list_ignored": "Show all ignored email patterns",
     "status": "Check bot status and integrations",
+    "memory_add": "Remember a fact about you",
+    "memory": "List your stored memories",
+    "memory_delete": "Delete a memory by its id",
 }
 
 
@@ -604,7 +608,7 @@ async def save_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if setting_key is SettingKey.GREET and not value:
         value = "first_name"
 
-    await user_service.set_setting(user.id, setting_key.value, value)
+    await user_service.set_setting(user.id, setting_key, value)
 
     await update.message.reply_text(
         f"{setting_label} updated to: {value}", reply_markup=ReplyKeyboardRemove()
@@ -727,10 +731,13 @@ async def handle_ignore_email_command(
         )
         return
 
-    raw_ignored = await user_service.get_setting(
-        user.id, SettingKey.IGNORE_EMAILS.value
+    ignored = (
+        cast(
+            list[str] | None,
+            await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS),
+        )
+        or []
     )
-    ignored = raw_ignored if isinstance(raw_ignored, list) else []
 
     if mask in ignored:
         await update.message.reply_text(
@@ -740,7 +747,7 @@ async def handle_ignore_email_command(
         return
 
     ignored.append(mask)
-    await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS.value, ignored)
+    await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS, ignored)
 
     await update.message.reply_text(
         f"✅ Added `{mask}` to your email ignore list\\.\n\n"
@@ -767,10 +774,13 @@ async def handle_list_ignored_command(
         )
         return
 
-    raw_ignored = await user_service.get_setting(
-        user.id, SettingKey.IGNORE_EMAILS.value
+    ignored = (
+        cast(
+            list[str] | None,
+            await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS),
+        )
+        or []
     )
-    ignored = raw_ignored if isinstance(raw_ignored, list) else []
 
     if not ignored:
         message = (
@@ -784,27 +794,7 @@ async def handle_list_ignored_command(
             f"**Currently ignoring {len(ignored)} pattern\\(s\\):**\n"
         )
         for i, pattern in enumerate(ignored, 1):
-            # Escape special characters in the pattern for markdown
-            escaped_pattern = (
-                pattern.replace("_", "\\_")
-                .replace("*", "\\*")
-                .replace("[", "\\[")
-                .replace("]", "\\]")
-                .replace("(", "\\(")
-                .replace(")", "\\)")
-                .replace("~", "\\~")
-                .replace("`", "\\`")
-                .replace(">", "\\>")
-                .replace("#", "\\#")
-                .replace("+", "\\+")
-                .replace("-", "\\-")
-                .replace("=", "\\=")
-                .replace("|", "\\|")
-                .replace("{", "\\{")
-                .replace("}", "\\}")
-                .replace(".", "\\.")
-                .replace("!", "\\!")
-            )
+            escaped_pattern = escape_markdown(pattern, version=2)
             message += f"{i}\\. `{escaped_pattern}`\n"
 
         message += (
@@ -814,6 +804,220 @@ async def handle_list_ignored_command(
         )
 
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_memory_add_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Add a short personal memory for the user."""
+    if not update.message or not update.effective_user:
+        return
+
+    text = " ".join(getattr(context, "args", [])).strip()
+    if not text:
+        await update.message.reply_text("Usage: /memory_add <text>")
+        return
+    if len(text) > 500:
+        await update.message.reply_text("Memory is too long (max 500 characters).")
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    memories = (
+        cast(
+            dict[str, dict[str, str]] | None,
+            await user_service.get_setting(user.id, SettingKey.MEMORIES),
+        )
+        or {}
+    )
+
+    if len(memories) >= 10:
+        await update.message.reply_text(
+            "You have reached the 10 memories limit. Delete one with /memory_delete <id>."
+        )
+        return
+
+    key = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    while key in memories:
+        key = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
+    memories[key] = {"user_input": text}
+    await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
+
+    await update.message.reply_text("✅ Memory added.")
+
+
+async def handle_memory_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show all stored memories for the user."""
+    if not update.message or not update.effective_user:
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    memories = (
+        cast(
+            dict[str, dict[str, str]] | None,
+            await user_service.get_setting(user.id, SettingKey.MEMORIES),
+        )
+        or {}
+    )
+
+    if not memories:
+        await update.message.reply_text(
+            "No memories stored. Use /memory_add to add one."
+        )
+        return
+
+    items = sorted(memories.items())
+    message = "🧠 **Your memories:**\n\n"
+    for i, (_, mem) in enumerate(items, 1):
+        txt = mem.get("user_input", "")
+        # Use plain text instead of markdown for user content to avoid parsing issues
+        message += f"{i}. {txt}\n"
+    message += "\nUse /memory_delete <id> to delete a memory."
+    await update.message.reply_text(message)
+
+
+async def start_memory_delete(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Start the memory deletion conversation or handle direct deletion."""
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return ConversationHandler.END
+
+    memories = (
+        cast(
+            dict[str, dict[str, str]] | None,
+            await user_service.get_setting(user.id, SettingKey.MEMORIES),
+        )
+        or {}
+    )
+
+    if not memories:
+        await update.message.reply_text(
+            "No memories to delete. Use /memory_add to add one first."
+        )
+        return ConversationHandler.END
+
+    # Check if user provided an ID directly
+    args = getattr(context, "args", [])
+    if args and args[0].isdigit():
+        mem_id = int(args[0])
+        if mem_id < 1 or mem_id > len(memories):
+            await update.message.reply_text("Invalid memory id.")
+            return ConversationHandler.END
+
+        key = sorted(memories.keys())[mem_id - 1]
+        memory_text = memories[key].get("user_input", "")
+        del memories[key]
+        await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
+        await update.message.reply_text(f"✅ Memory deleted: {memory_text}")
+        return ConversationHandler.END
+
+    # Show keyboard with memory options
+    items = sorted(memories.items())
+    keyboard = []
+    for i, (_, mem) in enumerate(items, 1):
+        txt = mem.get("user_input", "")
+        # Truncate long memories for keyboard display
+        display_text = txt[:40] + "..." if len(txt) > 40 else txt
+        keyboard.append([f"{i}. {display_text}"])
+
+    keyboard.append(["Cancel"])
+
+    await update.message.reply_text(
+        "🗑️ Select a memory to delete:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return ConversationState.SELECT_MEMORY_TO_DELETE
+
+
+async def select_memory_to_delete(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle the user's memory selection for deletion."""
+    if not update.message or not update.effective_user or not update.message.text:
+        return ConversationHandler.END
+
+    choice = update.message.text.strip()
+    if choice == "Cancel":
+        await update.message.reply_text(
+            "Memory deletion cancelled.", reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
+    # Extract the memory ID from the choice (format: "1. memory text...")
+    try:
+        mem_id = int(choice.split(".")[0])
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "Please select a memory from the options provided."
+        )
+        return ConversationState.SELECT_MEMORY_TO_DELETE
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return ConversationHandler.END
+
+    memories = (
+        cast(
+            dict[str, dict[str, str]] | None,
+            await user_service.get_setting(user.id, SettingKey.MEMORIES),
+        )
+        or {}
+    )
+
+    if mem_id < 1 or mem_id > len(memories):
+        await update.message.reply_text(
+            "Invalid memory selection.", reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
+    key = sorted(memories.keys())[mem_id - 1]
+    memory_text = memories[key].get("user_input", "")
+    del memories[key]
+    await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
+
+    await update.message.reply_text(
+        f"✅ Memory deleted: {memory_text}", reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+async def handle_memory_delete_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Legacy handler for direct memory deletion (kept for backward compatibility)."""
+    # This will be handled by the conversation handler now
+    pass
 
 
 async def handle_status_command(
@@ -844,9 +1048,7 @@ async def handle_status_command(
         google_status = f"⚠️ Error: {str(e)[:50]}..."
 
     # Get ignored email count
-    raw_ignored = await user_service.get_setting(
-        user.id, SettingKey.IGNORE_EMAILS.value
-    )
+    raw_ignored = await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS)
     ignored_count = len(raw_ignored) if isinstance(raw_ignored, list) else 0
 
     status_message = (
@@ -898,8 +1100,11 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("ignore_email", handle_ignore_email_command)
     await client.register_command_handler("list_ignored", handle_list_ignored_command)
     await client.register_command_handler("status", handle_status_command)
-
-    conv_handler = ConversationHandler(
+    await client.register_command_handler("memory_add", handle_memory_add_command)
+    await client.register_command_handler("memory", handle_memory_command)
+    await client.register_command_handler("memories", handle_memory_command)
+    # Settings conversation handler
+    settings_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],
         states={
             ConversationState.SELECT_SETTING: [
@@ -912,6 +1117,18 @@ async def create_telegram_client() -> TelegramClient:
         fallbacks=[CommandHandler("cancel", cancel_update)],
     )
 
-    await client.register_handler(conv_handler)
+    # Memory deletion conversation handler
+    memory_delete_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("memory_delete", start_memory_delete)],
+        states={
+            ConversationState.SELECT_MEMORY_TO_DELETE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_memory_to_delete)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_update)],
+    )
+
+    await client.register_handler(settings_conv_handler)
+    await client.register_handler(memory_delete_conv_handler)
 
     return client

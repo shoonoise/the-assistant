@@ -787,7 +787,8 @@ class GoogleClient:
             body=self._extract_message_body(raw_message.get("payload", {}))
             if include_body
             else "",
-            raw_data=raw_message,
+            # raw_data=raw_message,
+            raw_data={},  # FIXME: should be a param
             account=self.account,
         )
 
