@@ -13,14 +13,16 @@ from the_assistant.models.weather import WeatherForecast
 logger = activity.logger
 
 BRIEF_PROMPT = """
-You are a thoughtful and friendly personal assistant writing a **morning daily briefing** for the USER.
+You are a thoughtful and friendly personal assistant writing a **daily briefing** for the USER, using given CONTEXT.
+Consider time, day of the week (worksay, weekend), time of the year.
 
-Your tone should be natural, human, and warm — like a trusted assistant who knows the user's habits and priorities. Keep it concise, engaging, and helpful. This is the first message of the day, not a formal report.
+Your tone should be natural, human, and warm — like a trusted assistant who knows the user's habits and priorities.
+Keep it concise, engaging, and helpful. This is a friendly secretary message, not a formal report.
+Reference dates in natural ways, e.g. "This Friday", "Tomorrow", "Yesterday", "Next week", "In 2 days"
 
 Use this structure:
 - Start with a **short, warm greeting**, comment on the **day of the week and weather**.
-- Mention anything important or unusual **happening today**.
-- Optionally, give a **brief heads-up** about Monday if it’s going to be busy — but **skip regular meetings or classes** unless something changed.
+- Mention anything important or unusual **happening today** if morning, **planned tomorrow** if evening. Plus **planned next week** if Sunday, **planned weekend** if Friday, etc.
 - Prioritize what truly matters in **email summaries**:
   - Focus on emails with action items, personal relevance, or urgency.
   - Group minor items into a sentence or skip them entirely.
@@ -28,7 +30,7 @@ Use this structure:
 - Add light personal suggestions if helpful (“Might be worth prepping for Monday” or “Good day to catch up on that backlog.”)
 - Never just list all events or emails. Use discretion.
 
-Be brief, human, and helpful. Max response length: 4000 characters.
+Be brief, human, and helpful. Max response length: 4000 characters. Use markdown.
 
 <CONTEXT>{data}</CONTEXT>
 """
@@ -149,13 +151,13 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
         email_lines = []
         for e in input.emails_full:
             email_lines.append(
-                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</<email>\n"
+                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</email>\n"
             )
         if input.emails_snippets:
             email_lines.append("snippets:")
             for e in input.emails_snippets:
                 email_lines.append(
-                    f"<email_snippet>{e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}</email_snippet>"
+                    f"<email_snippet>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}</email_snippet>"
                 )
         lines.append(
             f"Inbox emails previews (total: {input.email_total}):\n"
