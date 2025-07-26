@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from the_assistant.integrations.telegram.constants import SettingKey
+from the_assistant.user_settings import SETTING_SCHEMAS
 
 from .models import ThirdPartyAccount, User, UserSetting
 
@@ -140,53 +143,67 @@ class UserService:
             await session.refresh(user)
             return user
 
-    async def set_setting(self, user_id: int, key: str, value: Any) -> None:
-        """Set or update a user setting."""
+    async def set_setting(self, user_id: int, key: SettingKey, value: Any) -> None:
+        """Set or update a user setting with validation."""
+        schema = cast(Any, SETTING_SCHEMAS[key])
+        validated = schema.model_validate(value)
+        payload = validated.model_dump()
+
         async with self._session_maker() as session:
             stmt = select(UserSetting).where(
-                UserSetting.user_id == user_id, UserSetting.key == key
+                UserSetting.user_id == user_id, UserSetting.key == key.value
             )
             result = await session.execute(stmt)
             setting = result.scalar_one_or_none()
             if setting:
-                setting.value_json = json.dumps(value)
+                setting.value_json = json.dumps(payload)
             else:
                 setting = UserSetting(
-                    user_id=user_id, key=key, value_json=json.dumps(value)
+                    user_id=user_id,
+                    key=key.value,
+                    value_json=json.dumps(payload),
                 )
                 session.add(setting)
             await session.commit()
 
-    async def get_setting(self, user_id: int, key: str) -> Any | None:
+    async def get_setting(self, user_id: int, key: SettingKey) -> Any | None:
         """Return a single user setting value or ``None`` if missing."""
+        schema = cast(Any, SETTING_SCHEMAS[key])
+
         async with self._session_maker() as session:
             stmt = select(UserSetting.value_json).where(
-                UserSetting.user_id == user_id, UserSetting.key == key
+                UserSetting.user_id == user_id, UserSetting.key == key.value
             )
             result = await session.execute(stmt)
             value_json = result.scalar_one_or_none()
             if value_json is None:
                 return None
-            return json.loads(value_json)
+            data = json.loads(value_json)
+            model = schema.model_validate(data)
+            return model.to_python()
 
     async def get_all_settings(self, user_id: int) -> dict[str, Any]:
-        """Return all settings for the given user."""
+        """Return all settings for the given user with validation."""
         async with self._session_maker() as session:
             stmt = select(UserSetting.key, UserSetting.value_json).where(
                 UserSetting.user_id == user_id
             )
             result = await session.execute(stmt)
             rows = result.all()
-            return {
-                key: json.loads(value_json) if value_json is not None else None
-                for key, value_json in rows
-            }
+            data: dict[str, Any] = {}
+            for key, value_json in rows:
+                key_enum = SettingKey(key)
+                schema = cast(Any, SETTING_SCHEMAS[key_enum])
+                value = json.loads(value_json) if value_json is not None else None
+                model = schema.model_validate(value)
+                data[key] = model.to_python()
+            return data
 
-    async def unset_setting(self, user_id: int, key: str) -> None:
+    async def unset_setting(self, user_id: int, key: SettingKey) -> None:
         """Remove a setting for the given user."""
         async with self._session_maker() as session:
             stmt = delete(UserSetting).where(
-                UserSetting.user_id == user_id, UserSetting.key == key
+                UserSetting.user_id == user_id, UserSetting.key == key.value
             )
             await session.execute(stmt)
             await session.commit()

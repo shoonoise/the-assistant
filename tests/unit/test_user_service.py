@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from the_assistant.db.models import Base
 from the_assistant.db.service import UserService
+from the_assistant.integrations.telegram.constants import SettingKey
 
 
 @pytest.fixture
@@ -48,16 +49,16 @@ async def test_update_user(user_service):
 async def test_setting_management(user_service):
     user = await user_service.create_user(username="c")
 
-    await user_service.set_setting(user.id, "timezone", "UTC")
-    await user_service.set_setting(user.id, "location", "Paris")
+    await user_service.set_setting(user.id, SettingKey.ABOUT_ME, "Hi")
+    await user_service.set_setting(user.id, SettingKey.LOCATION, "Paris")
 
-    assert await user_service.get_setting(user.id, "timezone") == "UTC"
+    assert await user_service.get_setting(user.id, SettingKey.ABOUT_ME) == "Hi"
 
     all_settings = await user_service.get_all_settings(user.id)
-    assert all_settings == {"timezone": "UTC", "location": "Paris"}
+    assert all_settings == {"about_me": "Hi", "location": "Paris"}
 
-    await user_service.unset_setting(user.id, "timezone")
-    assert await user_service.get_setting(user.id, "timezone") is None
+    await user_service.unset_setting(user.id, SettingKey.ABOUT_ME)
+    assert await user_service.get_setting(user.id, SettingKey.ABOUT_ME) is None
 
 
 @pytest.mark.asyncio

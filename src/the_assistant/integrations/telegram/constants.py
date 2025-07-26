@@ -16,6 +16,7 @@ class SettingKey(str, Enum):
     ABOUT_ME = "about_me"
     LOCATION = "location"
     IGNORE_EMAILS = "ignore_emails"
+    MEMORIES = "memories"
 
 
 SETTINGS_LABEL_MAP: dict[str, SettingKey] = {

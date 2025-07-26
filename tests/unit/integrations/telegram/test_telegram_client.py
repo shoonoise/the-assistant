@@ -1,5 +1,6 @@
 """Unit tests for the Telegram client."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +15,9 @@ from the_assistant.integrations.telegram.telegram_client import (
     handle_briefing_command,
     handle_google_auth_command,
     handle_ignore_email_command,
+    handle_memory_add_command,
+    handle_memory_command,
+    handle_memory_delete_command,
     save_setting,
     start_update_settings,
 )
@@ -440,7 +444,7 @@ class TestUpdateSettings:
             mock_update.message.text = "  Hello  "
             await save_setting(mock_update, mock_context)
 
-        user_service.set_setting.assert_awaited_once_with(1, "greet", "Hello")
+        user_service.set_setting.assert_awaited_once_with(1, SettingKey.GREET, "Hello")
         assert mock_update.message.reply_text.called
 
     @pytest.mark.asyncio
@@ -460,7 +464,9 @@ class TestUpdateSettings:
             mock_update.message.text = ""
             await save_setting(mock_update, mock_context)
 
-        user_service.set_setting.assert_awaited_once_with(1, "greet", "first_name")
+        user_service.set_setting.assert_awaited_once_with(
+            1, SettingKey.GREET, "first_name"
+        )
 
     @pytest.mark.asyncio
     async def test_save_setting_user_not_registered(self, mock_update, mock_context):
@@ -495,6 +501,79 @@ class TestUpdateSettings:
             await handle_ignore_email_command(mock_update, mock_context)
 
         user_service.set_setting.assert_awaited_once_with(
-            1, "ignore_emails", ["*@spam.com"]
+            1, SettingKey.IGNORE_EMAILS, ["*@spam.com"]
         )
         assert mock_update.message.reply_text.called
+
+    @pytest.mark.asyncio
+    async def test_memory_add_command(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_setting = AsyncMock(return_value={})
+        user_service.set_setting = AsyncMock()
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.datetime"
+            ) as mock_dt,
+        ):
+            mock_dt.now.return_value = datetime(2024, 1, 1, tzinfo=UTC)
+            mock_dt.UTC = UTC
+            mock_context.args = ["remember this"]
+            await handle_memory_add_command(mock_update, mock_context)
+
+        assert user_service.set_setting.await_count == 1
+        call_args = user_service.set_setting.call_args[0]
+        assert call_args[0] == 1
+        assert call_args[1] == SettingKey.MEMORIES
+        memories = call_args[2]
+        assert list(memories.values())[0]["user_input"] == "remember this"
+
+    @pytest.mark.asyncio
+    async def test_memory_command_lists(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        mems = {
+            "2024-01-02 00:00:00": {"user_input": "b"},
+            "2024-01-01 00:00:00": {"user_input": "a"},
+        }
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_setting = AsyncMock(return_value=mems)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            await handle_memory_command(mock_update, mock_context)
+
+        assert mock_update.message.reply_text.called
+        msg = mock_update.message.reply_text.call_args[0][0]
+        assert "1." in msg and "2." in msg
+
+    @pytest.mark.asyncio
+    async def test_memory_delete_command(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        mems = {
+            "2024-01-01 00:00:00": {"user_input": "a"},
+            "2024-01-02 00:00:00": {"user_input": "b"},
+        }
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_setting = AsyncMock(return_value=mems)
+        user_service.set_setting = AsyncMock()
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = ["1"]
+            await handle_memory_delete_command(mock_update, mock_context)
+
+        assert user_service.set_setting.await_count == 1
+        args = user_service.set_setting.call_args[0]
+        assert len(args[2]) == 1
