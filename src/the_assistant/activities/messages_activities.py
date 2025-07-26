@@ -149,7 +149,7 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
         email_lines = []
         for e in input.emails_full:
             email_lines.append(
-                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</<email>>"
+                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</<email>\n"
             )
         if input.emails_snippets:
             email_lines.append("snippets:")

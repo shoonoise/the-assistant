@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT = (
     "You are a warm, smart, and human-like personal assistant helping the user manage daily life. "
-    "You summarize only what matters, with a personal tone. Response limit: 4000 symbols."
+    "You summarize only what matters, with a personal tone. Response limit: 4000 symbols. Respond should be on a user's language"
 )
 
 
