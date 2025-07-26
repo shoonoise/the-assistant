@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from telegram import (
     Bot,
+    BotCommand,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     Update,
@@ -35,6 +36,20 @@ from the_assistant.settings import get_settings
 from .constants import SETTINGS_LABEL_MAP, ConversationState, SettingKey
 
 logger = logging.getLogger(__name__)
+
+
+# Command registry with descriptions for help and autocompletion
+COMMAND_REGISTRY: dict[str, str] = {
+    "start": "Start the bot and get a welcome message",
+    "help": "Show available commands and their descriptions",
+    "briefing": "Get an on-demand briefing of your day",
+    "settings": "View your current settings",
+    "update_settings": "Update your preferences and settings",
+    "google_auth": "Authenticate with Google services",
+    "ignore_email": "Add an email pattern to ignore list",
+    "list_ignored": "Show all ignored email patterns",
+    "status": "Check bot status and integrations",
+}
 
 
 class TelegramClient:
@@ -123,14 +138,22 @@ class TelegramClient:
         self,
         command: str,
         handler: Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]],
+        description: str | None = None,
     ) -> None:
         """Register a command handler for the bot.
 
         Args:
             command: The command to handle (without the leading slash).
             handler: The async function that will handle the command.
+            description: Optional description for the command. If not provided,
+                        will use the description from COMMAND_REGISTRY.
         """
         self._command_handlers[command] = handler
+
+        # Update command registry with custom description if provided
+        if description:
+            COMMAND_REGISTRY[command] = description
+
         logger.info(f"Registered handler for command: /{command}")
 
     async def register_handler(self, handler: ConversationHandler) -> None:
@@ -139,10 +162,47 @@ class TelegramClient:
         self._extra_handlers.append(handler)
         logger.info("Registered additional handler")
 
+    async def set_bot_commands(self) -> None:
+        """Set bot commands for autocompletion in Telegram clients.
+
+        This enables the command menu and autocompletion in Telegram clients.
+        Commands are taken from the registered command handlers.
+        """
+        try:
+            # Create BotCommand objects from registered commands
+            commands = [
+                BotCommand(
+                    command=cmd, description=COMMAND_REGISTRY.get(cmd, "No description")
+                )
+                for cmd in self._command_handlers.keys()
+                if cmd in COMMAND_REGISTRY  # Only include commands with descriptions
+            ]
+
+            # Set the commands with Telegram
+            await self.bot.set_my_commands(commands)
+            logger.info(f"Set {len(commands)} bot commands for autocompletion")
+
+        except Exception as e:
+            logger.error(f"Failed to set bot commands: {e}")
+
+    async def update_command_description(self, command: str, description: str) -> None:
+        """Update the description for a specific command.
+
+        Args:
+            command: The command name (without leading slash).
+            description: The new description for the command.
+        """
+        COMMAND_REGISTRY[command] = description
+        logger.info(f"Updated description for command /{command}")
+
+        # Refresh bot commands if application is already set up
+        if self.application is not None:
+            await self.set_bot_commands()
+
     async def _handle_unknown_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle unknown commands.
+        """Handle unknown commands with helpful suggestions.
 
         Args:
             update: The update object from Telegram.
@@ -156,23 +216,26 @@ class TelegramClient:
         command = update.message.text.split()[0] if update.message.text else ""
         user_id = update.effective_user.id
 
-        # Get available commands for suggestions
-        available_commands = list(self._command_handlers.keys())
-
-        # Create a helpful error message
+        # Create a helpful error message with command descriptions
         error_message = (
             f"❓ Sorry, I don't understand the command `{command}`.\n\n"
-            f"Available commands:\n"
+            "**Available commands:**\n"
         )
 
-        # Add each available command to the message
-        for cmd in available_commands:
-            error_message += f"• /{cmd}\n"
+        # Add each available command with its description
+        for cmd, description in COMMAND_REGISTRY.items():
+            if cmd in self._command_handlers:
+                error_message += f"• /{cmd} - {description}\n"
 
-        error_message += "\nUse /help for more detailed information about each command."
+        error_message += (
+            "\n💡 **Tips:**\n"
+            "• Use the command menu (/) to see all commands\n"
+            "• Type /help for detailed information\n"
+            "• Commands support autocompletion"
+        )
 
-        # Send the error message without markdown to avoid parsing issues
-        await update.message.reply_text(error_message)
+        # Send the error message with markdown formatting
+        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -181,7 +244,7 @@ class TelegramClient:
         """Set up command handlers for the bot.
 
         This method should be called after all command handlers have been registered
-        and before starting the bot.
+        and before starting the bot. It also sets up bot commands for autocompletion.
         """
         if self.application is not None:
             logger.warning("Command handlers are already set up")
@@ -208,6 +271,9 @@ class TelegramClient:
             )
         )
         logger.info("Added handler for unknown commands")
+
+        # Set bot commands for autocompletion
+        await self.set_bot_commands()
 
     async def start_polling(self) -> None:
         """Start the bot in polling mode.
@@ -295,7 +361,7 @@ async def handle_help_command(
 ) -> None:
     """Handle the /help command.
 
-    This command provides a list of available commands and their descriptions.
+    This command provides a comprehensive list of available commands and their descriptions.
 
     Args:
         update: The update object from Telegram.
@@ -305,20 +371,28 @@ async def handle_help_command(
         logger.warning("Received help command without message or effective_user")
         return
 
-    help_message = (
-        "📚 **Available Commands**\n\n"
-        "/start - Start the bot and get a welcome message\n"
-        "/help - Show this help message\n"
-        "/briefing - Get an on-demand briefing of your day\n\n"
-        "The bot will also send you automatic notifications for:\n"
+    # Build help message from command registry
+    help_message = "📚 **Available Commands**\n\n"
+
+    # Add each command with its description
+    for command, description in COMMAND_REGISTRY.items():
+        help_message += f"/{command} - {description}\n"
+
+    help_message += (
+        "\n**Automatic Features:**\n"
         "• Morning briefings with your daily schedule\n"
         "• Reminders about upcoming trips\n"
-        "• Important task deadlines\n\n"
+        "• Important task deadlines\n"
+        "• Smart email filtering and notifications\n\n"
+        "**Tips:**\n"
+        "• Use the command menu (/) to see all available commands\n"
+        "• Commands support autocompletion in most Telegram clients\n"
+        "• Use /settings to customize your experience\n\n"
         "If you have any issues or questions, please contact your system administrator."
     )
 
     await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
-    logger.info(f"Sent help message to user {update.effective_user.id}")
+    logger.info(f"Sent comprehensive help message to user {update.effective_user.id}")
 
 
 async def handle_briefing_command(
@@ -410,7 +484,7 @@ async def handle_settings_command(
 ) -> None:
     """Handle the /settings command.
 
-    This command shows the user's current settings and allows them to modify preferences.
+    This command shows the user's current settings and provides guidance on customization.
 
     Args:
         update: The update object from Telegram.
@@ -433,17 +507,35 @@ async def handle_settings_command(
             registered_at=datetime.now(UTC),
         )
 
-    # Create settings message
+    # Create comprehensive settings message with proper escaping
+    username_display = f"@{user.username}" if user.username else "Not set"
+    registered_display = (
+        user.registered_at.strftime("%Y-%m-%d %H:%M UTC")
+        if user.registered_at
+        else "Unknown"
+    )
+
     settings_message = (
-        f"⚙️ **Your Settings**\n\n"
-        f"**User ID:** `{user.id}`\n"
-        f"**Name:** {user.first_name or 'Not set'}\n"
-        f"**Username:** @{user.username or 'Not set'}\n"
-        f"**Registered:** {user.registered_at or 'Unknown'}\n"
+        "⚙️ **Your Settings**\n\n"
+        "**User Information:**\n"
+        f"• User ID: `{user.id}`\n"
+        f"• Name: {user.first_name or 'Not set'}\n"
+        f"• Username: {username_display}\n"
+        f"• Registered: {registered_display}\n\n"
+        "**Available Settings Commands:**\n"
+        "• /update\\_settings - Modify your preferences\n"
+        "• /google\\_auth - Connect Google services\n"
+        "• /ignore\\_email - Manage email filters\n\n"
+        "**Current Features:**\n"
+        "• Daily briefings\n"
+        "• Trip notifications\n"
+        "• Email filtering\n"
+        "• Calendar integration\n\n"
+        "Use /help to see all available commands\\."
     )
 
     await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)
-    logger.info(f"Sent settings to user {user_id}")
+    logger.info(f"Sent comprehensive settings to user {user_id}")
 
 
 async def start_update_settings(
@@ -559,7 +651,10 @@ async def handle_google_auth_command(
 
     user = await user_service.get_user_by_telegram_chat_id(chat_user.id)
     if not user:
-        raise ValueError("User not registered")
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
 
     args = getattr(context, "args", [])
     account = args[0] if args else None
@@ -567,7 +662,12 @@ async def handle_google_auth_command(
     client = GoogleClient(user.id, account=account)
     if await client.is_authenticated():
         await update.message.reply_text(
-            "✅ You are already authenticated with Google.",
+            "✅ You are already authenticated with Google.\n\n"
+            "**Connected Services:**\n"
+            "• Google Calendar\n"
+            "• Gmail\n"
+            "• Google Drive (if needed)\n\n"
+            "Your Google integration is working properly!"
         )
         return
 
@@ -576,8 +676,14 @@ async def handle_google_auth_command(
     auth_url = await client.generate_auth_url(state)
 
     message = (
-        f"Please [authorize access]({auth_url}) to your Google account. "
-        "You'll receive a confirmation once completed."
+        "🔐 **Google Authentication Required**\n\n"
+        f"Please [click here to authorize]({auth_url}) access to your Google account.\n\n"
+        "**This will enable:**\n"
+        "• Calendar event notifications\n"
+        "• Email monitoring and filtering\n"
+        "• Smart briefing generation\n"
+        "• Trip and event reminders\n\n"
+        "You'll receive a confirmation message once the authentication is completed."
     )
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
     logger.info(f"Sent Google auth link to user {chat_user.id}")
@@ -587,7 +693,7 @@ async def handle_ignore_email_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Add an email mask to the ignored list for the user."""
+    """Add an email pattern to the ignored list for the user."""
 
     if not update.message or not update.effective_user:
         logger.warning("Received ignore_email command without message or user")
@@ -595,7 +701,20 @@ async def handle_ignore_email_command(
 
     args = getattr(context, "args", [])
     if not args:
-        await update.message.reply_text("Usage: /ignore_email <email or mask>")
+        # Show usage information
+        usage_message = (
+            "📧 **Email Ignore Patterns**\n\n"
+            "**Usage:** `/ignore\\_email <pattern>`\n\n"
+            "**Examples:**\n"
+            "• `/ignore\\_email noreply@example\\.com` \\- Ignore specific email\n"
+            "• `/ignore\\_email @spam\\.com` \\- Ignore entire domain\n"
+            "• `/ignore\\_email newsletter` \\- Ignore emails containing 'newsletter'\n\n"
+            "**Other Commands:**\n"
+            "• `/list\\_ignored` \\- View all ignored patterns\n"
+            "• `/settings` \\- View your current settings"
+        )
+
+        await update.message.reply_text(usage_message, parse_mode=ParseMode.MARKDOWN)
         return
 
     mask = args[0].strip()
@@ -603,17 +722,151 @@ async def handle_ignore_email_command(
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
-        raise ValueError("User not registered")
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
 
     raw_ignored = await user_service.get_setting(
         user.id, SettingKey.IGNORE_EMAILS.value
     )
     ignored = raw_ignored if isinstance(raw_ignored, list) else []
-    if mask not in ignored:
-        ignored.append(mask)
-        await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS.value, ignored)
 
-    await update.message.reply_text(f"Emails matching '{mask}' will be ignored.")
+    if mask in ignored:
+        await update.message.reply_text(
+            f"📧 Pattern `{mask}` is already in your ignore list\\.\n\n"
+            f"Use `/list\\_ignored` to see all ignored patterns\\."
+        )
+        return
+
+    ignored.append(mask)
+    await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS.value, ignored)
+
+    await update.message.reply_text(
+        f"✅ Added `{mask}` to your email ignore list\\.\n\n"
+        f"Emails matching this pattern will no longer trigger notifications\\.\n"
+        f"Use `/list\\_ignored` to see all ignored patterns\\."
+    )
+
+
+async def handle_list_ignored_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Show all ignored email patterns for the user."""
+
+    if not update.message or not update.effective_user:
+        logger.warning("Received list_ignored command without message or user")
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    raw_ignored = await user_service.get_setting(
+        user.id, SettingKey.IGNORE_EMAILS.value
+    )
+    ignored = raw_ignored if isinstance(raw_ignored, list) else []
+
+    if not ignored:
+        message = (
+            "📧 **Email Ignore Patterns**\n\n"
+            "**No patterns currently ignored\\.**\n\n"
+            "Use `/ignore\\_email <pattern>` to add patterns to ignore\\."
+        )
+    else:
+        message = (
+            "📧 **Email Ignore Patterns**\n\n"
+            f"**Currently ignoring {len(ignored)} pattern\\(s\\):**\n"
+        )
+        for i, pattern in enumerate(ignored, 1):
+            # Escape special characters in the pattern for markdown
+            escaped_pattern = (
+                pattern.replace("_", "\\_")
+                .replace("*", "\\*")
+                .replace("[", "\\[")
+                .replace("]", "\\]")
+                .replace("(", "\\(")
+                .replace(")", "\\)")
+                .replace("~", "\\~")
+                .replace("`", "\\`")
+                .replace(">", "\\>")
+                .replace("#", "\\#")
+                .replace("+", "\\+")
+                .replace("-", "\\-")
+                .replace("=", "\\=")
+                .replace("|", "\\|")
+                .replace("{", "\\{")
+                .replace("}", "\\}")
+                .replace(".", "\\.")
+                .replace("!", "\\!")
+            )
+            message += f"{i}\\. `{escaped_pattern}`\n"
+
+        message += (
+            "\n**Commands:**\n"
+            "• `/ignore\\_email <pattern>` \\- Add new pattern\n"
+            "• `/settings` \\- View all settings"
+        )
+
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_status_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Show bot status and integration health."""
+
+    if not update.message or not update.effective_user:
+        logger.warning("Received status command without message or user")
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    # Check Google authentication status
+    google_status = "❌ Not connected"
+    try:
+        google_client = GoogleClient(user.id)
+        if await google_client.is_authenticated():
+            google_status = "✅ Connected"
+    except Exception as e:
+        google_status = f"⚠️ Error: {str(e)[:50]}..."
+
+    # Get ignored email count
+    raw_ignored = await user_service.get_setting(
+        user.id, SettingKey.IGNORE_EMAILS.value
+    )
+    ignored_count = len(raw_ignored) if isinstance(raw_ignored, list) else 0
+
+    status_message = (
+        "🤖 **Bot Status**\n\n"
+        f"**User:** {user.first_name or 'Unknown'} \\(ID: {user.id}\\)\n"
+        f"**Registered:** {user.registered_at.strftime('%Y-%m-%d') if user.registered_at else 'Unknown'}\n\n"
+        f"**Integrations:**\n"
+        f"• Google Services: {google_status}\n"
+        f"• Telegram: ✅ Connected\n\n"
+        f"**Settings:**\n"
+        f"• Ignored email patterns: {ignored_count}\n\n"
+        f"**Available Features:**\n"
+        f"• Daily briefings\n"
+        f"• Trip notifications\n"
+        f"• Email filtering\n"
+        f"• Calendar integration\n\n"
+        f"Use `/help` to see all available commands\\."
+    )
+
+    await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN)
 
 
 async def create_telegram_client() -> TelegramClient:
@@ -636,12 +889,15 @@ async def create_telegram_client() -> TelegramClient:
         raise ValueError("Failed to validate Telegram bot credentials")
 
     # Register the default command handlers
+    # Note: Descriptions are automatically taken from COMMAND_REGISTRY
     await client.register_command_handler("start", handle_start_command)
     await client.register_command_handler("help", handle_help_command)
     await client.register_command_handler("briefing", handle_briefing_command)
     await client.register_command_handler("settings", handle_settings_command)
     await client.register_command_handler("google_auth", handle_google_auth_command)
     await client.register_command_handler("ignore_email", handle_ignore_email_command)
+    await client.register_command_handler("list_ignored", handle_list_ignored_command)
+    await client.register_command_handler("status", handle_status_command)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],

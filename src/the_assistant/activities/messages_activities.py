@@ -13,17 +13,22 @@ from the_assistant.models.weather import WeatherForecast
 logger = activity.logger
 
 BRIEF_PROMPT = """
-Using the provided <CONTEXT>, write a friendly and personalized daily briefing for the USER.
+You are a thoughtful and friendly personal assistant writing a **morning daily briefing** for the USER.
 
-- Begin with a warm, human-like greeting — it's their first message of the morning.
-- Highlight today's events clearly, and only mention future ones if they are clearly important.
-- Prioritize what matters most to the user: personal meetings, government messages, invoices, deliveries, and anything requiring action.
-- For emails:
-  - Prioritize unread and today's messages.
-  - Summarize read ones only if they are especially relevant.
-  - Translate and summarize in detail any messages not in English or Russian.
-- Include light, human commentary where helpful (“Looks like a busy Monday!” or “Might be a good idea to check your SFR invoice today.”).
-- Blend structure and natural tone. Avoid sounding like a machine-generated report.
+Your tone should be natural, human, and warm — like a trusted assistant who knows the user's habits and priorities. Keep it concise, engaging, and helpful. This is the first message of the day, not a formal report.
+
+Use this structure:
+- Start with a **short, warm greeting**, comment on the **day of the week and weather**.
+- Mention anything important or unusual **happening today**.
+- Optionally, give a **brief heads-up** about Monday if it’s going to be busy — but **skip regular meetings or classes** unless something changed.
+- Prioritize what truly matters in **email summaries**:
+  - Focus on emails with action items, personal relevance, or urgency.
+  - Group minor items into a sentence or skip them entirely.
+  - Translate and explain non-English/Russian emails in detail if any.
+- Add light personal suggestions if helpful (“Might be worth prepping for Monday” or “Good day to catch up on that backlog.”)
+- Never just list all events or emails. Use discretion.
+
+Be brief, human, and helpful. Max response length: 4000 characters.
 
 <CONTEXT>{data}</CONTEXT>
 """

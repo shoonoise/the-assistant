@@ -282,7 +282,7 @@ class TestTelegramClient:
     async def test_handle_google_auth_command_unregistered_user(
         self, mock_update, mock_context
     ):
-        """An error is raised if the user is not registered."""
+        """A helpful message is sent if the user is not registered."""
 
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
@@ -292,8 +292,13 @@ class TestTelegramClient:
             return_value=user_service,
         ):
             mock_context.args = []
-            with pytest.raises(ValueError):
-                await handle_google_auth_command(mock_update, mock_context)
+            await handle_google_auth_command(mock_update, mock_context)
+
+            # Verify that a helpful message was sent instead of raising an error
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args[0][0]
+            assert "need to register first" in call_args
+            assert "/start" in call_args
 
     @pytest.mark.asyncio
     async def test_handle_briefing_command_success(self, mock_update, mock_context):
