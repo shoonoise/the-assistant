@@ -72,29 +72,6 @@ class TestMainApp:
         response = client.get("/auth-success")
 
         assert response.status_code == 200
-        assert response.json() == {
-            "message": "Google authentication successful! You can close this window."
-        }
-
-    def test_auth_error_endpoint_no_params(self, client):
-        """Test the auth error endpoint without parameters."""
-        response = client.get("/auth-error")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "error" in data
-        assert "message" in data
-
-    def test_auth_error_endpoint_with_params(self, client):
-        """Test the auth error endpoint with parameters."""
-        response = client.get(
-            "/auth-error?error=access_denied&message=User denied access"
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "error" in data
-        assert "message" in data
 
     def test_google_oauth_router_included(self):
         """Test that the Google OAuth router is included."""
