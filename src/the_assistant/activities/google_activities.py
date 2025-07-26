@@ -56,26 +56,12 @@ class GetTodayEventsInput:
 class GetEmailsInput:
     user_id: int
     account: str | None = None
-    unread_only: bool = True
+    unread_only: bool | None = True
     sender: str | None = None
     max_results: int = 5
+    query: str | None = None
+    include_body: bool = True
     ignored_senders: list[str] | None = None
-
-
-@dataclass
-class GetImportantEmailsInput:
-    user_id: int
-    account: str | None = None
-    max_full: int = 10
-    max_snippets: int = 10
-    ignored_senders: list[str] | None = None
-
-
-@dataclass
-class ImportantEmailsResult:
-    emails_full: list[GmailMessage]
-    emails_snippets: list[GmailMessage]
-    total: int
 
 
 @dataclass
@@ -86,17 +72,6 @@ class GetUpcomingEventsAccountsInput:
     accounts: list[str]
     days_ahead: int = 30
     calendar_id: str = "primary"
-
-
-@dataclass
-class GetImportantEmailsAccountsInput:
-    """Input for fetching important emails from multiple accounts."""
-
-    user_id: int
-    accounts: list[str]
-    max_full: int = 10
-    max_snippets: int = 10
-    ignored_senders: list[str] | None = None
 
 
 def get_google_client(user_id: int, account: str | None = None) -> GoogleClient:
@@ -252,43 +227,16 @@ async def get_emails(input: GetEmailsInput) -> list[GmailMessage]:
         raise ValueError(f"User {input.user_id} is not authenticated with Google")
 
     emails = await client.get_emails(
+        query=input.query,
         unread_only=input.unread_only,
         sender=input.sender,
         max_results=input.max_results,
+        include_body=input.include_body,
         ignored_senders=input.ignored_senders,
     )
 
     logger.info(f"Retrieved {len(emails)} emails")
     return emails
-
-
-@activity.defn
-async def get_important_emails(
-    input: GetImportantEmailsInput,
-) -> ImportantEmailsResult:
-    """Retrieve important Gmail messages with total inbox count."""
-    logger.info(f"Fetching important emails for user {input.user_id}")
-
-    client = get_google_client(input.user_id, input.account)
-
-    if not await client.is_authenticated():
-        raise ValueError(f"User {input.user_id} is not authenticated with Google")
-
-    emails, total = await client.get_important_emails(
-        max_results=input.max_full + input.max_snippets,
-        include_body=True,
-        ignored_senders=input.ignored_senders,
-    )
-
-    emails_full = emails[: input.max_full]
-    emails_snippets = emails[input.max_full : input.max_full + input.max_snippets]
-
-    logger.info("Retrieved %s important emails (total %s)", len(emails), total)
-    return ImportantEmailsResult(
-        emails_full=emails_full,
-        emails_snippets=emails_snippets,
-        total=total,
-    )
 
 
 @activity.defn
@@ -312,42 +260,3 @@ async def get_upcoming_events_accounts(
     return [event for sublist in events for event in sublist]
 
     return events
-
-
-@activity.defn
-async def get_important_emails_accounts(
-    input: GetImportantEmailsAccountsInput,
-) -> ImportantEmailsResult:
-    """Fetch important emails aggregated from multiple accounts."""
-
-    emails_full: list[GmailMessage] = []
-    emails_snippets: list[GmailMessage] = []
-    total = 0
-
-    tasks = [
-        get_important_emails(
-            GetImportantEmailsInput(
-                user_id=input.user_id,
-                max_full=input.max_full,
-                max_snippets=input.max_snippets,
-                account=account,
-                ignored_senders=input.ignored_senders,
-            )
-        )
-        for account in input.accounts
-    ]
-    results = await asyncio.gather(*tasks)
-
-    emails_full = []
-    emails_snippets = []
-    total = 0
-    for result in results:
-        emails_full.extend(result.emails_full)
-        emails_snippets.extend(result.emails_snippets)
-        total += result.total
-
-    return ImportantEmailsResult(
-        emails_full=emails_full,
-        emails_snippets=emails_snippets,
-        total=total,
-    )

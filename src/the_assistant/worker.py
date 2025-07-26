@@ -17,8 +17,6 @@ from the_assistant.activities.google_activities import (
     get_calendar_events,
     get_emails,
     get_events_by_date,
-    get_important_emails,
-    get_important_emails_accounts,
     get_today_events,
     get_upcoming_events,
     get_upcoming_events_accounts,
@@ -72,9 +70,7 @@ async def run_worker() -> None:
                 get_events_by_date,
                 get_today_events,
                 get_emails,
-                get_important_emails,
                 get_upcoming_events_accounts,
-                get_important_emails_accounts,
                 # Obsidian activities
                 scan_vault_notes,
                 # Weather activities

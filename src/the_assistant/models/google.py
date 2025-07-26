@@ -44,8 +44,8 @@ class CalendarEvent(BaseAssistantModel):
     recurring_event_id: str | None = Field(
         default=None, description="ID of the recurring event series (if applicable)"
     )
-    raw_data: dict[str, Any] = Field(
-        default_factory=dict, description="Original API response data"
+    raw_data: dict[str, Any] | None = Field(
+        default=None, description="Original API response data"
     )
     account: str | None = Field(default=None, description="Google account identifier")
 
@@ -128,8 +128,8 @@ class GmailMessage(BaseAssistantModel):
     to: str = Field(default="", description="Recipient email")
     date: datetime | None = Field(default=None, description="Message date")
     body: str = Field(default="", description="Plain text body")
-    raw_data: dict[str, Any] = Field(
-        default_factory=dict, description="Original API response data"
+    raw_data: dict[str, Any] | None = Field(
+        default=None, description="Original API response data"
     )
     account: str | None = Field(default=None, description="Google account identifier")
 
@@ -137,6 +137,8 @@ class GmailMessage(BaseAssistantModel):
     @property
     def is_unread(self) -> bool:
         """Check if the message is unread."""
+        if not self.raw_data:
+            return False
         return "UNREAD" in self.raw_data.get("labelIds", [])
 
     @computed_field

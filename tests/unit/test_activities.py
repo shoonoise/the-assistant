@@ -330,9 +330,11 @@ class TestEmailActivities:
         assert result == sample_emails
         mock_google_client.is_authenticated.assert_called_once()
         mock_google_client.get_emails.assert_called_once_with(
+            query=None,
             unread_only=True,
             sender=None,
             max_results=5,
+            include_body=True,
             ignored_senders=None,
         )
 
