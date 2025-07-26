@@ -49,12 +49,12 @@ class DailyBriefingInput:
 @dataclass
 class BriefingPromptInput:
     events: list[CalendarEvent]
-    emails_full: list[GmailMessage]
-    emails_snippets: list[GmailMessage]
-    email_total: int
-    weather: WeatherForecast | None
+    emails: list[GmailMessage]
     settings: dict[str, Any]
     current_time: str
+    max_full: int = 10
+    max_snippets: int = 10
+    weather: WeatherForecast | None = None
 
 
 @dataclass
@@ -148,20 +148,21 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
             ev_lines.append(f"- {e.summary} ({start}) {e.location or ''} [{e.account}]")
         lines.append("<events>" + "\n".join(ev_lines) + "</events>\n")
 
-    if input.emails_full or input.emails_snippets:
+    if input.emails:
         email_lines = []
-        for e in input.emails_full:
-            email_lines.append(
-                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</email>\n"
-            )
-        if input.emails_snippets:
-            email_lines.append("snippets:")
-            for e in input.emails_snippets:
+        for idx, e in enumerate(input.emails):
+            if idx < input.max_full:
+                email_lines.append(
+                    f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</email>\n"
+                )
+            elif idx < input.max_full + input.max_snippets:
                 email_lines.append(
                     f"<email_snippet>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}</email_snippet>"
                 )
+            else:
+                break
         lines.append(
-            f"Inbox emails previews (total: {input.email_total}):\n"
+            "Inbox emails previews:\n"
             + "<emails>"
             + "\n".join(email_lines)
             + "</emails>"

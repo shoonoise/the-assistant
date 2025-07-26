@@ -471,13 +471,15 @@ class GoogleClient:
 
     async def get_emails(
         self,
+        *,
+        query: str | None = None,
         unread_only: bool | None = None,
         sender: str | None = None,
         after: datetime | None = None,
         before: datetime | None = None,
         max_results: int = 10,
-        *,
         include_body: bool = False,
+        include_raw: bool = False,
         ignored_senders: list[str] | None = None,
     ) -> list[GmailMessage]:
         """Retrieve emails from the user's Gmail inbox."""
@@ -487,6 +489,8 @@ class GoogleClient:
             raise GoogleAuthError("No valid credentials available")
         self._credentials = credentials
         query_parts: list[str] = []
+        if query:
+            query_parts.append(query)
         if unread_only is True:
             query_parts.append("is:unread")
         elif unread_only is False:
@@ -500,13 +504,13 @@ class GoogleClient:
         if before:
             query_parts.append(before.strftime("before:%Y/%m/%d"))
 
-        query = " ".join(query_parts)
+        query_str = " ".join(query_parts)
 
         try:
             service = await self._get_gmail_service()
             list_kwargs = {"userId": "me", "maxResults": max_results}
-            if query:
-                list_kwargs["q"] = query
+            if query_str:
+                list_kwargs["q"] = query_str
             messages_result = service.users().messages().list(**list_kwargs).execute()
             message_items = messages_result.get("messages", [])
 
@@ -519,7 +523,11 @@ class GoogleClient:
                     .execute()
                 )
                 try:
-                    emails.append(self._parse_gmail_message(msg, include_body))
+                    emails.append(
+                        self._parse_gmail_message(
+                            msg, include_body, include_raw=include_raw
+                        )
+                    )
                 except Exception as parse_err:  # pragma: no cover - safeguard
                     logger.warning(
                         f"Failed to parse gmail message {item.get('id')}: {parse_err}"
@@ -530,60 +538,12 @@ class GoogleClient:
                     for e in emails
                     if not self._sender_matches(e.sender, ignored_senders)
                 ]
+
+            emails.sort(
+                key=lambda m: m.date or datetime.min.replace(tzinfo=UTC),
+                reverse=True,
+            )
             return emails
-        except HttpError as e:
-            error_msg = f"Gmail API error: {e}"
-            logger.error(error_msg)
-            raise GoogleGmailError(error_msg) from e
-        except Exception as e:  # pragma: no cover - unexpected
-            error_msg = f"Failed to retrieve gmail messages: {e}"
-            logger.error(error_msg)
-            raise GoogleGmailError(error_msg) from e
-
-    async def get_important_emails(
-        self,
-        *,
-        max_results: int = 20,
-        include_body: bool = True,
-        ignored_senders: list[str] | None = None,
-    ) -> tuple[list[GmailMessage], int]:
-        """Retrieve important emails and the total inbox count."""
-        credentials = await self.get_credentials()
-        if not credentials:
-            raise GoogleAuthError("No valid credentials available")
-        self._credentials = credentials
-        try:
-            service = await self._get_gmail_service()
-            list_kwargs = {
-                "userId": "me",
-                "maxResults": max_results,
-                "q": "in:inbox",
-            }
-            messages_result = service.users().messages().list(**list_kwargs).execute()
-            total = int(messages_result.get("resultSizeEstimate", 0))
-            message_items = messages_result.get("messages", [])
-
-            emails: list[GmailMessage] = []
-            for item in message_items:
-                msg = (
-                    service.users()
-                    .messages()
-                    .get(userId="me", id=item["id"], format="full")
-                    .execute()
-                )
-                try:
-                    emails.append(self._parse_gmail_message(msg, include_body))
-                except Exception as parse_err:  # pragma: no cover - safeguard
-                    logger.warning(
-                        f"Failed to parse gmail message {item.get('id')}: {parse_err}"
-                    )
-            if ignored_senders:
-                emails = [
-                    e
-                    for e in emails
-                    if not self._sender_matches(e.sender, ignored_senders)
-                ]
-            return emails, total
         except HttpError as e:
             error_msg = f"Gmail API error: {e}"
             logger.error(error_msg)
@@ -644,7 +604,7 @@ class GoogleClient:
                 .get(userId="me", id=email_id, format="full")
                 .execute
             )
-            return self._parse_gmail_message(msg, include_body=True)
+            return self._parse_gmail_message(msg, include_body=True, include_raw=True)
         except HttpError as e:
             error_msg = f"Gmail API error: {e}"
             logger.error(error_msg)
@@ -756,7 +716,11 @@ class GoogleClient:
         return self._trim_lines(plain)
 
     def _parse_gmail_message(
-        self, raw_message: dict[str, Any], include_body: bool = False
+        self,
+        raw_message: dict[str, Any],
+        include_body: bool = False,
+        *,
+        include_raw: bool = False,
     ) -> GmailMessage:
         """Parse raw Gmail API message into GmailMessage model."""
 
@@ -787,8 +751,7 @@ class GoogleClient:
             body=self._extract_message_body(raw_message.get("payload", {}))
             if include_body
             else "",
-            # raw_data=raw_message,
-            raw_data={},  # FIXME: should be a param
+            raw_data=raw_message if include_raw else None,
             account=self.account,
         )
 

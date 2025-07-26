@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
@@ -7,9 +8,9 @@ NO_RETRY = RetryPolicy(maximum_attempts=1)
 
 with workflow.unsafe.imports_passed_through():
     from the_assistant.activities.google_activities import (
-        GetImportantEmailsAccountsInput,
+        GetEmailsInput,
         GetUpcomingEventsAccountsInput,
-        get_important_emails_accounts,
+        get_emails,
         get_upcoming_events_accounts,
     )
     from the_assistant.activities.messages_activities import (
@@ -52,18 +53,26 @@ class DailyBriefing:
             retry_policy=NO_RETRY,
         )
 
-        email_data = await workflow.execute_activity(
-            get_important_emails_accounts,
-            GetImportantEmailsAccountsInput(
-                user_id=user_id,
-                max_full=15,
-                max_snippets=20,
-                accounts=accounts,
-                ignored_senders=settings.get("ignore_emails") if settings else None,
-            ),
-            start_to_close_timeout=timedelta(seconds=60),
-            retry_policy=NO_RETRY,
-        )
+        email_tasks = [
+            workflow.execute_activity(
+                get_emails,
+                GetEmailsInput(
+                    user_id=user_id,
+                    account=account,
+                    max_results=35,
+                    query="in:inbox",
+                    include_body=True,
+                    ignored_senders=settings.get("ignore_emails") if settings else None,
+                    unread_only=None,
+                    sender=None,
+                ),
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=NO_RETRY,
+            )
+            for account in accounts
+        ]
+        email_lists = await asyncio.gather(*email_tasks)
+        emails = [e for sub in email_lists for e in sub]
 
         weather = await workflow.execute_activity(
             get_weather_forecast,
@@ -76,9 +85,9 @@ class DailyBriefing:
             build_briefing_prompt,
             BriefingPromptInput(
                 events=events,
-                emails_full=email_data.emails_full,
-                emails_snippets=email_data.emails_snippets,
-                email_total=email_data.total,
+                emails=emails,
+                max_full=15,
+                max_snippets=20,
                 weather=weather[0] if weather else None,
                 settings=settings,
                 current_time=workflow.now().strftime("%Y-%m-%d %A %H:%M"),
