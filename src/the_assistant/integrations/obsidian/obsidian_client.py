@@ -8,9 +8,12 @@ to provide a comprehensive API for note management, filtering, and task operatio
 
 import asyncio
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from .filter_engine import FilterEngine
 from .markdown_parser import MarkdownParser
@@ -591,8 +594,6 @@ class ObsidianClient:
             return content
 
         # Build YAML frontmatter
-        import yaml
-
         yaml_content = yaml.dump(metadata, default_flow_style=False, allow_unicode=True)
 
         # Combine frontmatter and content
@@ -602,7 +603,6 @@ class ObsidianClient:
         self, content: str, task_text: str, completed: bool
     ) -> str:
         """Update task completion status in raw content while preserving formatting."""
-        import re
 
         # Pattern to match the specific task with flexible whitespace and formatting
         escaped_text = re.escape(task_text.strip())
@@ -656,7 +656,6 @@ class ObsidianClient:
 
 
 if __name__ == "__main__":
-    import asyncio
 
     async def main():
         client = ObsidianClient("~/dev/the_assistant/obsidian_vault", user_id=1)

@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from the_assistant.db.models import Base
+from the_assistant.db.models import Base, ThirdPartyAccount
 from the_assistant.db.service import UserService
 from the_assistant.integrations.telegram.constants import SettingKey
 
@@ -83,8 +83,6 @@ async def test_google_credentials_multiple_accounts(user_service):
 
     # Ensure three third-party account records exist
     async with user_service._session_maker() as session:
-        from the_assistant.db.models import ThirdPartyAccount
-
         result = await session.execute(
             select(ThirdPartyAccount).where(ThirdPartyAccount.user_id == user.id)
         )

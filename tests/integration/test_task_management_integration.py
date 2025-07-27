@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from the_assistant.integrations.obsidian.models import (
+    NoteNotFoundError,
     TaskUpdateError,
 )
 from the_assistant.integrations.obsidian.obsidian_client import ObsidianClient
@@ -212,7 +213,6 @@ Some additional content here.
     @pytest.mark.asyncio
     async def test_error_handling_integration(self, client):
         """Test error handling with real vault operations."""
-        from the_assistant.integrations.obsidian.models import NoteNotFoundError
 
         # Test with non-existent note
         with pytest.raises(NoteNotFoundError):

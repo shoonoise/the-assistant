@@ -22,11 +22,15 @@ from the_assistant.activities.messages_activities import (
     DailyBriefingInput,
     build_daily_briefing,
 )
-from the_assistant.activities.obsidian_activities import scan_vault_notes
+from the_assistant.activities.obsidian_activities import (
+    ScanVaultNotesInput,
+    scan_vault_notes,
+)
 from the_assistant.activities.weather_activities import (
     GetWeatherForecastInput,
     get_weather_forecast,
 )
+from the_assistant.models import NoteFilters
 from the_assistant.models.google import CalendarEvent, GmailMessage
 from the_assistant.models.weather import WeatherForecast
 
@@ -198,7 +202,6 @@ class TestObsidianActivities:
         self, mock_obsidian_client_class, mock_get_settings, mock_obsidian_client
     ):
         """Test successful vault scanning."""
-        from the_assistant.activities.obsidian_activities import ScanVaultNotesInput
 
         settings = AsyncMock()
         settings.obsidian_vault_path = "/path/to/vault"
@@ -221,8 +224,6 @@ class TestObsidianActivities:
         self, mock_obsidian_client_class, mock_get_settings, mock_obsidian_client
     ):
         """Test vault scanning with filters."""
-        from the_assistant.activities.obsidian_activities import ScanVaultNotesInput
-        from the_assistant.models import NoteFilters
 
         settings = AsyncMock()
         settings.obsidian_vault_path = "/path/to/vault"

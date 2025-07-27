@@ -1,5 +1,6 @@
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeChatModel
+from langchain_core.messages import AIMessage
 
 from the_assistant.activities.messages_activities import (
     BriefingSummaryInput,
@@ -9,8 +10,6 @@ from the_assistant.activities.messages_activities import (
 
 @pytest.mark.asyncio
 async def test_build_briefing_summary(monkeypatch):
-    from langchain_core.messages import AIMessage
-
     # Mock the create_react_agent function to avoid bind_tools issues
     class MockAgentExecutor:
         async def ainvoke(self, input_data, config=None):

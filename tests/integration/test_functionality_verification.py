@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from the_assistant.integrations.obsidian.models import NoteNotFoundError
 from the_assistant.integrations.obsidian.vault_manager import VaultManager
 
 
@@ -140,7 +141,6 @@ class TestFunctionalityVerification:
 
     async def test_error_handling_unchanged(self, vault_manager):
         """Test that error handling behavior is unchanged."""
-        from the_assistant.integrations.obsidian.models import NoteNotFoundError
 
         # Test loading nonexistent note
         with pytest.raises(NoteNotFoundError):
