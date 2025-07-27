@@ -150,13 +150,12 @@ application will exit if it is missing.
 
 The application uses a PostgreSQL database with SQLAlchemy models and Alembic migrations for schema management:
 
-1. **Users Table**: Stores user identity and integration information
+1. **Users Table**: Stores core user identity information
    - `id`: Primary key
    - `auth_provider`: Authentication provider (e.g., "telegram", "google")
    - `external_id`: External identifier from the auth provider
    - `username`: Optional username
    - `first_name`, `last_name`: User's name
-   - `google_credentials_enc`: Encrypted Google credentials (if applicable)
    - Timestamps for registration, creation, and updates
 
 2. **User Settings Table**: Stores user preferences in a key-value structure
@@ -164,6 +163,14 @@ The application uses a PostgreSQL database with SQLAlchemy models and Alembic mi
    - `user_id`: Foreign key to users table
    - `key`: Setting name
    - `value_json`: Setting value stored as JSON text
+   - Timestamps for creation and updates
+
+3. **Third Party Accounts Table**: Stores credentials for external services
+   - `id`: Primary key
+   - `user_id`: Foreign key to users table
+   - `provider`: Name of the external provider (e.g., `"google"`)
+   - `account`: Account identifier (defaults to `"default"` for Google)
+   - `credentials_enc`: Encrypted credentials data
    - Timestamps for creation and updates
 
 The database schema is managed using Alembic migrations. Use `make init-db` to initialize the database or `make migrate` to apply new migrations.

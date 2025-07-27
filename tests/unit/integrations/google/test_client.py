@@ -107,11 +107,12 @@ class TestGoogleClient:
         assert client.settings == self.mock_settings
         self.mock_store_class.assert_called_once_with(
             encryption_key=self.mock_settings.db_encryption_key,
-            account=None,
+            account="default",
         )
         assert client.credential_store == self.mock_store_instance
         assert client.credentials_path == self.mock_settings.google_credentials_path
         assert client.scopes == self.mock_settings.google_oauth_scopes
+        assert client.account == "default"
 
     def test_init_with_account(self):
         """GoogleClient forwards account to credential store."""

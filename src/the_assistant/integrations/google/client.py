@@ -69,7 +69,7 @@ class GoogleClient:
             account: Optional account identifier when using multiple accounts
         """
         self.user_id = user_id
-        self.account = account
+        self.account = account or "default"
         self.settings = get_settings()
 
         self.credential_store = PostgresCredentialStore(
@@ -570,7 +570,10 @@ class GoogleClient:
 
         credentials = await self.get_credentials()
         if not credentials:
-            raise GoogleAuthError("No valid credentials available")
+            raise GoogleAuthError(
+                f"No valid credentials available. User: {self.user_id}, Account: {self.account}"
+            )
+
         self._credentials = credentials
 
         try:
