@@ -113,7 +113,21 @@ ci: check ## Run CI checks locally
 	@echo "$(GREEN)🎯 Ready for CI!$(RESET)"
 
 migrate: ## Run database migrations
-	DATABASE_URL="postgresql+asyncpg://temporal:temporal@localhost:5432/the_assistant" uv run alembic upgrade head
+	@echo "$(BLUE)🗃️ Applying database migrations...$(RESET)"
+	uv run python scripts/manage_migrations.py apply --local
 
 migration: ## Create new migration (usage: make migration MESSAGE="description")
-	DATABASE_URL="postgresql+asyncpg://temporal:temporal@localhost:5432/the_assistant" uv run alembic revision --autogenerate -m "$(MESSAGE)"
+	@echo "$(BLUE)🗃️ Creating new migration: $(MESSAGE)$(RESET)"
+	uv run python scripts/manage_migrations.py create --message "$(MESSAGE)" --autogenerate --local
+
+migration-status: ## Show current migration status
+	@echo "$(BLUE)🗃️ Current migration status:$(RESET)"
+	uv run python scripts/manage_migrations.py current --local
+
+migration-history: ## Show migration history
+	@echo "$(BLUE)🗃️ Migration history:$(RESET)"
+	uv run python scripts/manage_migrations.py history --local
+
+migration-downgrade: ## Downgrade one migration (usage: make migration-downgrade TARGET="-1")
+	@echo "$(BLUE)🗃️ Downgrading migration to: $(TARGET)$(RESET)"
+	uv run python scripts/manage_migrations.py downgrade $(TARGET) --local

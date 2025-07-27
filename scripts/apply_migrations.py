@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create Alembic migration with proper database connection handling.
+Apply Alembic migrations with proper database connection handling.
 """
 
 import argparse
@@ -37,22 +37,27 @@ def get_database_url(local: bool = False) -> str:
 
 
 def main() -> None:
-    """Create migration with proper database URL handling."""
-    parser = argparse.ArgumentParser(description="Create Alembic migration")
+    """Apply migrations with proper database URL handling."""
+    parser = argparse.ArgumentParser(description="Apply Alembic migrations")
     parser.add_argument(
-        "--message", "-m",
-        required=True,
-        help="Migration message"
-    )
-    parser.add_argument(
-        "--autogenerate",
-        action="store_true",
-        help="Auto-generate migration from model changes"
+        "--target", "-t",
+        default="head",
+        help="Target revision (default: head)"
     )
     parser.add_argument(
         "--local",
         action="store_true",
         help="Use localhost instead of docker hostname"
+    )
+    parser.add_argument(
+        "--current",
+        action="store_true",
+        help="Show current migration version"
+    )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Show migration history"
     )
     
     args = parser.parse_args()
@@ -66,12 +71,12 @@ def main() -> None:
     print(f"Using database URL: {database_url}")
     
     # Build alembic command
-    cmd_parts = ["uv", "run", "alembic", "revision"]
-    
-    if args.autogenerate:
-        cmd_parts.append("--autogenerate")
-    
-    cmd_parts.extend(["-m", args.message])
+    if args.current:
+        cmd_parts = ["uv", "run", "alembic", "current"]
+    elif args.history:
+        cmd_parts = ["uv", "run", "alembic", "history"]
+    else:
+        cmd_parts = ["uv", "run", "alembic", "upgrade", args.target]
     
     print(f"Running: {' '.join(cmd_parts)}")
     result = subprocess.run(cmd_parts)

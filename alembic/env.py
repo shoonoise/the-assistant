@@ -10,8 +10,19 @@ from alembic import context
 # Add src to path so we can import our models
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from the_assistant.db.models import Base
-from the_assistant.settings import get_settings
+# Import models directly to avoid circular imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "the_assistant" / "db"))
+from models import Base
+
+# Import settings directly to avoid circular imports
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -29,9 +40,14 @@ target_metadata = Base.metadata
 # Set the database URL from our settings or environment
 database_url = os.getenv("ALEMBIC_DATABASE_URL")
 if not database_url:
-    settings = get_settings()
-    # Convert async URL to sync for Alembic
-    database_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+    # Build database URL from environment variables to avoid circular imports
+    db_user = os.getenv("POSTGRES_USER", "postgres")
+    db_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+    db_host = os.getenv("POSTGRES_HOST", "localhost")
+    db_port = os.getenv("POSTGRES_PORT", "5432")
+    db_name = os.getenv("POSTGRES_DB", "the_assistant")
+    
+    database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 config.set_main_option("sqlalchemy.url", database_url)
 
