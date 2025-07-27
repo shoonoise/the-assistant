@@ -339,4 +339,4 @@ Check Temporal UI for workflow execution details:
 
 ## License
 
-MIT License - see LICENSE file for details.
+CC BY-NC-SA 4.0 - see LICENSE file for details.
