@@ -1,6 +1,7 @@
 from langchain_core.tools import BaseTool, tool
 
 from .google.client import GoogleClient
+from .mcp_client import get_mcp_tools
 from .telegram.telegram_client import TelegramClient
 
 
@@ -27,7 +28,7 @@ async def _get_email(user_id: int, email_id: str, account: str | None = None) ->
     return email.model_dump()
 
 
-def get_default_tools(user_id: int) -> list[BaseTool]:
+async def get_default_tools(user_id: int) -> list[BaseTool]:
     """Return default agent tools bound to the given user."""
 
     @tool
@@ -47,4 +48,7 @@ def get_default_tools(user_id: int) -> list[BaseTool]:
         """Get a full Gmail message by ID."""
         return await _get_email(user_id, email_id, account)
 
-    return [send_message, get_event, get_email]
+    # Get MCP tools (including Tavily websearch)
+    mcp_tools = await get_mcp_tools()
+
+    return [send_message, get_event, get_email] + mcp_tools

@@ -19,12 +19,19 @@ async def test_send_message_tool(monkeypatch):
             called = True
             assert text == "hi"
 
+    async def mock_get_mcp_tools():
+        return []
+
     monkeypatch.setattr(
         "the_assistant.integrations.agent_tools.TelegramClient",
         DummyClient,
     )
+    monkeypatch.setattr(
+        "the_assistant.integrations.agent_tools.get_mcp_tools",
+        mock_get_mcp_tools,
+    )
 
-    tools = get_default_tools(1)
+    tools = await get_default_tools(1)
     send_tool = next(t for t in tools if t.name == "send_message")
     await send_tool.arun("hi")
     assert called
@@ -50,12 +57,19 @@ async def test_get_event_tool(monkeypatch):
             assert event_id == "e1"
             return event
 
+    async def mock_get_mcp_tools():
+        return []
+
     monkeypatch.setattr(
         "the_assistant.integrations.agent_tools.GoogleClient",
         DummyClient,
     )
+    monkeypatch.setattr(
+        "the_assistant.integrations.agent_tools.get_mcp_tools",
+        mock_get_mcp_tools,
+    )
 
-    tools = get_default_tools(1)
+    tools = await get_default_tools(1)
     tool_obj = next(t for t in tools if t.name == "get_event")
     result = await tool_obj.arun("e1")
     assert result["id"] == "e1"
@@ -82,12 +96,19 @@ async def test_get_email_tool(monkeypatch):
             assert email_id == "m1"
             return email
 
+    async def mock_get_mcp_tools():
+        return []
+
     monkeypatch.setattr(
         "the_assistant.integrations.agent_tools.GoogleClient",
         DummyClient,
     )
+    monkeypatch.setattr(
+        "the_assistant.integrations.agent_tools.get_mcp_tools",
+        mock_get_mcp_tools,
+    )
 
-    tools = get_default_tools(1)
+    tools = await get_default_tools(1)
     tool_obj = next(t for t in tools if t.name == "get_email")
     result = await tool_obj.arun("m1")
     assert result["id"] == "m1"

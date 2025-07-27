@@ -31,6 +31,7 @@ Use this structure:
 - Never just list all events or emails. Use discretion.
 
 Be brief, human, and helpful. Max response length: 4000 characters. Use markdown.
+Use web search tool to find an interesting fact about today.
 
 <CONTEXT>{data}</CONTEXT>
 """
@@ -118,7 +119,7 @@ async def build_briefing_summary(input: BriefingSummaryInput) -> str:
         prompt=BRIEF_PROMPT,
         data=input.data,
     )
-    return await agent.run(task)
+    return await agent.run(task, user_id=input.user_id)
 
 
 @activity.defn

@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = Field(None, env="LANGSMITH_API_KEY")
     langsmith_project: str | None = Field(None, env="LANGSMITH_PROJECT")
 
+    # MCP
+    tavily_api_key: str | None = Field(None, env="TAVILY_API_KEY")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(
