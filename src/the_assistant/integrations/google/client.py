@@ -69,7 +69,7 @@ class GoogleClient:
             account: Optional account identifier when using multiple accounts
         """
         self.user_id = user_id
-        self.account = account
+        self.account = account or "default"
         self.settings = get_settings()
 
         self.credential_store = PostgresCredentialStore(

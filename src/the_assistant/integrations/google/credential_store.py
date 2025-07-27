@@ -45,7 +45,7 @@ class PostgresCredentialStore(CredentialStore):
         self.encryption_key = encryption_key
         self.fernet = Fernet(encryption_key.encode())
         self.user_service = user_service or get_user_service()
-        self.account = account
+        self.account = account or "default"
 
     async def get(self, user_id: int) -> Credentials | None:
         """Get credentials for a user."""

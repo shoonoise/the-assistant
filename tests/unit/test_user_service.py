@@ -69,6 +69,7 @@ async def test_google_credentials_multiple_accounts(user_service):
         user.id, "cred-personal", account="personal"
     )
     await user_service.set_google_credentials(user.id, "cred-work", account="work")
+    await user_service.set_google_credentials(user.id, "cred-default")
 
     assert (
         await user_service.get_google_credentials(user.id, account="personal")
@@ -78,8 +79,7 @@ async def test_google_credentials_multiple_accounts(user_service):
         await user_service.get_google_credentials(user.id, account="work")
         == "cred-work"
     )
-    # Legacy column should remain empty
-    assert await user_service.get_google_credentials(user.id) is None
+    assert await user_service.get_google_credentials(user.id) == "cred-default"
 
     # Ensure two third-party account records exist
     async with user_service._session_maker() as session:
@@ -89,4 +89,8 @@ async def test_google_credentials_multiple_accounts(user_service):
             select(ThirdPartyAccount).where(ThirdPartyAccount.user_id == user.id)
         )
         accounts = result.scalars().all()
-        assert {a.account for a in accounts} == {"personal", "work"}
+        assert {a.account for a in accounts} == {
+            "personal",
+            "work",
+            "default",
+        }

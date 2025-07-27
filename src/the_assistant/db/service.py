@@ -97,39 +97,20 @@ class UserService:
         credentials_enc: str | None,
         account: str | None = None,
     ) -> None:
-        """Store encrypted Google credentials for a user.
+        """Store encrypted Google credentials for a user."""
 
-        When ``account`` is provided the credentials are stored in the
-        ``third_party_accounts`` table with provider ``"google"``. The original
-        ``users.google_credentials_enc`` column is still used when ``account`` is
-        ``None`` for backwards compatibility.
-        """
-        if account:
-            await self._set_third_party_credentials(
-                user_id, "google", credentials_enc, account
-            )
-            return
-
-        async with self._session_maker() as session:
-            user = await session.get(User, user_id)
-            if user is None:
-                return
-            user.google_credentials_enc = credentials_enc
-            user.google_creds_updated_at = (
-                datetime.now(UTC) if credentials_enc else None
-            )
-            await session.commit()
+        account_name = account or "default"
+        await self._set_third_party_credentials(
+            user_id, "google", credentials_enc, account_name
+        )
 
     async def get_google_credentials(
         self, user_id: int, account: str | None = None
     ) -> str | None:
         """Return encrypted Google credentials for a user."""
-        if account:
-            return await self._get_third_party_credentials(user_id, "google", account)
 
-        async with self._session_maker() as session:
-            user = await session.get(User, user_id)
-            return user.google_credentials_enc if user else None
+        account_name = account or "default"
+        return await self._get_third_party_credentials(user_id, "google", account_name)
 
     async def update_user(self, user_id: int, **data: Any) -> User | None:
         """Update a user's fields and return the updated record."""
