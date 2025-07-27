@@ -118,3 +118,20 @@ async def test_get_user_accounts(user_service):
     await user_service._set_third_party_credentials(user.id, "google", None, "no_creds")
     google_accounts_after = await user_service.get_user_accounts(user.id, "google")
     assert set(google_accounts_after) == {"personal", "work", "default"}
+
+
+@pytest.mark.asyncio
+async def test_task_creation_and_listing(user_service):
+    user = await user_service.create_user(username="taskuser")
+
+    task = await user_service.create_task(
+        user.id,
+        raw_instruction="every day at 6pm say hi",
+        schedule="daily 6pm",
+        instruction="say hi",
+    )
+    assert task.id is not None
+
+    tasks = await user_service.list_tasks(user.id)
+    assert len(tasks) == 1
+    assert tasks[0].raw_instruction == "every day at 6pm say hi"

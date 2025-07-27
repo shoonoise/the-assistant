@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.user_settings import SETTING_SCHEMAS
 
-from .models import ThirdPartyAccount, User, UserSetting
+from .models import ScheduledTask, ThirdPartyAccount, User, UserSetting
 
 
 class UserService:
@@ -200,3 +200,27 @@ class UserService:
             result = await session.execute(stmt)
             accounts = result.scalars().all()
             return [account for account in accounts if account is not None]
+
+    async def create_task(
+        self, user_id: int, raw_instruction: str, schedule: str, instruction: str
+    ) -> ScheduledTask:
+        """Create a scheduled task for the user."""
+
+        async with self._session_maker() as session:
+            task = ScheduledTask(
+                user_id=user_id,
+                raw_instruction=raw_instruction,
+                schedule=schedule,
+                instruction=instruction,
+            )
+            session.add(task)
+            await session.commit()
+            await session.refresh(task)
+            return task
+
+    async def list_tasks(self, user_id: int) -> list[ScheduledTask]:
+        """Return all scheduled tasks for the user."""
+        async with self._session_maker() as session:
+            stmt = select(ScheduledTask).where(ScheduledTask.user_id == user_id)
+            result = await session.execute(stmt)
+            return result.scalars().all()

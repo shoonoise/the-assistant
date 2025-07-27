@@ -50,6 +50,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    tasks: Mapped[list["ScheduledTask"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserSetting(Base):
@@ -97,3 +101,22 @@ class ThirdPartyAccount(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="third_party_accounts")
+
+
+class ScheduledTask(Base):
+    """User scheduled task."""
+
+    __tablename__ = "tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    raw_instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    schedule: Mapped[str] = mapped_column(String, nullable=False)
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="tasks")

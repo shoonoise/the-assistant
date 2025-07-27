@@ -53,6 +53,7 @@ COMMAND_REGISTRY: dict[str, str] = {
     "memory_add": "Remember a fact about you",
     "memory": "List your stored memories",
     "memory_delete": "Delete a memory by its id",
+    "add_task": "Create a new scheduled task",
 }
 
 
@@ -1020,6 +1021,43 @@ async def handle_memory_delete_command(
     pass
 
 
+async def handle_add_task_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Create a scheduled task from user instruction."""
+    if not update.message or not update.effective_user:
+        return
+
+    raw_instruction = " ".join(getattr(context, "args", [])).strip()
+    if not raw_instruction:
+        await update.message.reply_text("Usage: /add_task <instruction>")
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    from the_assistant.integrations.llm import TaskParser
+
+    parser = TaskParser()
+    schedule, instruction = await parser.parse(raw_instruction)
+    if not schedule:
+        await update.message.reply_text(
+            "❌ Could not parse a schedule. Try something like 'every day at 6pm say hi'."
+        )
+        return
+
+    await user_service.create_task(
+        user.id, raw_instruction, schedule=schedule, instruction=instruction
+    )
+
+    await update.message.reply_text("✅ Task added.")
+
+
 async def handle_status_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1103,6 +1141,7 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("memory_add", handle_memory_add_command)
     await client.register_command_handler("memory", handle_memory_command)
     await client.register_command_handler("memories", handle_memory_command)
+    await client.register_command_handler("add_task", handle_add_task_command)
     # Settings conversation handler
     settings_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],
