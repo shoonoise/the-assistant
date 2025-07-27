@@ -188,3 +188,15 @@ class UserService:
             )
             await session.execute(stmt)
             await session.commit()
+
+    async def get_user_accounts(self, user_id: int, provider: str) -> list[str]:
+        """Return all account names for a user and provider."""
+        async with self._session_maker() as session:
+            stmt = select(ThirdPartyAccount.account).where(
+                ThirdPartyAccount.user_id == user_id,
+                ThirdPartyAccount.provider == provider,
+                ThirdPartyAccount.credentials_enc.is_not(None),
+            )
+            result = await session.execute(stmt)
+            accounts = result.scalars().all()
+            return [account for account in accounts if account is not None]

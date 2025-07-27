@@ -570,7 +570,10 @@ class GoogleClient:
 
         credentials = await self.get_credentials()
         if not credentials:
-            raise GoogleAuthError("No valid credentials available")
+            raise GoogleAuthError(
+                f"No valid credentials available. User: {self.user_id}, Account: {self.account}"
+            )
+
         self._credentials = credentials
 
         try:

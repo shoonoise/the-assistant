@@ -33,6 +33,9 @@ from the_assistant.activities.obsidian_activities import (
 from the_assistant.activities.telegram_activities import (
     send_message,
 )
+from the_assistant.activities.user_activities import (
+    get_user_accounts,
+)
 from the_assistant.activities.weather_activities import get_weather_forecast
 from the_assistant.workflows.daily_briefing import DailyBriefing
 
@@ -73,6 +76,8 @@ async def run_worker() -> None:
                 get_upcoming_events_accounts,
                 # Obsidian activities
                 scan_vault_notes,
+                # User activities
+                get_user_accounts,
                 # Weather activities
                 get_weather_forecast,
                 # Messages activities

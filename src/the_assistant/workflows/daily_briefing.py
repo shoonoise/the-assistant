@@ -25,6 +25,10 @@ with workflow.unsafe.imports_passed_through():
         SendMessageInput,
         send_message,
     )
+    from the_assistant.activities.user_activities import (
+        GetUserAccountsInput,
+        get_user_accounts,
+    )
     from the_assistant.activities.weather_activities import (
         GetWeatherForecastInput,
         get_weather_forecast,
@@ -35,7 +39,13 @@ with workflow.unsafe.imports_passed_through():
 class DailyBriefing:
     @workflow.run
     async def run(self, user_id: int) -> None:
-        accounts = ["personal", "work"]
+        # Get all available Google accounts for the user
+        accounts = await workflow.execute_activity(
+            get_user_accounts,
+            GetUserAccountsInput(user_id=user_id, provider="google"),
+            start_to_close_timeout=timedelta(seconds=5),
+            retry_policy=NO_RETRY,
+        )
 
         settings = await workflow.execute_activity(
             get_user_settings,

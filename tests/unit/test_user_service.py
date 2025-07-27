@@ -81,7 +81,7 @@ async def test_google_credentials_multiple_accounts(user_service):
     )
     assert await user_service.get_google_credentials(user.id) == "cred-default"
 
-    # Ensure two third-party account records exist
+    # Ensure three third-party account records exist
     async with user_service._session_maker() as session:
         from the_assistant.db.models import ThirdPartyAccount
 
@@ -94,3 +94,29 @@ async def test_google_credentials_multiple_accounts(user_service):
             "work",
             "default",
         }
+
+
+@pytest.mark.asyncio
+async def test_get_user_accounts(user_service):
+    """Test getting all accounts for a user and provider."""
+    user = await user_service.create_user(username="accounts_test")
+
+    # Set up multiple Google accounts
+    await user_service.set_google_credentials(
+        user.id, "cred-personal", account="personal"
+    )
+    await user_service.set_google_credentials(user.id, "cred-work", account="work")
+    await user_service.set_google_credentials(user.id, "cred-default")
+
+    # Test getting Google accounts
+    google_accounts = await user_service.get_user_accounts(user.id, "google")
+    assert set(google_accounts) == {"personal", "work", "default"}
+
+    # Test with non-existent provider
+    other_accounts = await user_service.get_user_accounts(user.id, "other")
+    assert other_accounts == []
+
+    # Test with account that has no credentials (should be excluded)
+    await user_service._set_third_party_credentials(user.id, "google", None, "no_creds")
+    google_accounts_after = await user_service.get_user_accounts(user.id, "google")
+    assert set(google_accounts_after) == {"personal", "work", "default"}
