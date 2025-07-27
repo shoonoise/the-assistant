@@ -32,14 +32,24 @@ async def _get_email(user_id: int, email_id: str, account: str | None = None) ->
 
 
 async def _get_weather(location: str, day: date | str) -> dict:
-    """Get weather forecast for a specific location and date."""
+    """Get weather forecast for a specific location and date (hourly precision).
+
+    The provided date must be within the next 16 days, which is the limit of the
+    underlying API.
+    """
+
     query_date = date.fromisoformat(day) if isinstance(day, str) else day
     client = WeatherClient()
-    forecasts = await client.get_forecast(location, days=7)
-    for forecast in forecasts:
-        if forecast.forecast_date == query_date:
-            return forecast.model_dump()
-    raise ValueError(f"Weather for {location} on {query_date.isoformat()} not found")
+    forecasts = await client.get_forecast(location, days=16)
+    forecast_map = {f.forecast_date: f for f in forecasts}
+    if query_date not in forecast_map:
+        raise ValueError(
+            f"Weather for {location} on {query_date.isoformat()} not found"
+        )
+
+    forecast = forecast_map[query_date]
+    forecast.hourly = await client.get_hourly_forecast(location, query_date)
+    return forecast.model_dump()
 
 
 async def get_default_tools(user_id: int) -> list[BaseTool]:
@@ -64,7 +74,7 @@ async def get_default_tools(user_id: int) -> list[BaseTool]:
 
     @tool
     async def weather(location: str, day: date | str) -> dict:
-        """Get weather forecast for a given location and date (YYYY-MM-DD)."""
+        """Get hourly weather forecast for a given location and date (YYYY-MM-DD)."""
         return await _get_weather(location, day)
 
     # Get MCP tools (including Tavily websearch)

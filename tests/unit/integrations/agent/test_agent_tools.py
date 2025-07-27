@@ -4,7 +4,7 @@ import pytest
 
 from the_assistant.integrations.agent_tools import get_default_tools
 from the_assistant.models.google import CalendarEvent, GmailMessage
-from the_assistant.models.weather import WeatherForecast
+from the_assistant.models.weather import HourlyForecast, WeatherForecast
 
 
 @pytest.mark.asyncio
@@ -125,11 +125,24 @@ async def test_weather_tool(monkeypatch):
         temperature_min=15,
     )
 
+    hourly = [
+        HourlyForecast(
+            timestamp=datetime(2024, 7, 10, 0, 0),
+            weather_code=1,
+            temperature=20.0,
+        )
+    ]
+
     class DummyClient:
-        async def get_forecast(self, location: str, days: int = 7):
+        async def get_forecast(self, location: str, days: int = 16):
             assert location == "Paris"
-            assert days == 7
+            assert days == 16
             return [forecast]
+
+        async def get_hourly_forecast(self, location: str, day: date):
+            assert location == "Paris"
+            assert day == date(2024, 7, 10)
+            return hourly
 
     async def mock_get_mcp_tools():
         return []
@@ -149,3 +162,4 @@ async def test_weather_tool(monkeypatch):
 
     assert result["location"] == "Paris"
     assert result["forecast_date"] == date(2024, 7, 10)
+    assert len(result["hourly"]) == 1

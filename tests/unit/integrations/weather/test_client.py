@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from the_assistant.integrations.weather.weather_client import WeatherClient
-from the_assistant.models.weather import WeatherForecast
+from the_assistant.models.weather import HourlyForecast, WeatherForecast
 
 
 class FakeResponse:
@@ -89,3 +89,25 @@ async def test_get_forecast_multiple_days():
     assert len(forecasts) == 2
     assert forecasts[0].forecast_date == date(2024, 7, 10)
     assert forecasts[1].forecast_date == date(2024, 7, 11)
+
+
+@pytest.mark.asyncio
+async def test_get_hourly_forecast_success():
+    geocode = {"results": [{"latitude": 52.52, "longitude": 13.41}]}
+    hourly = {
+        "hourly": {
+            "time": ["2024-07-10T00:00", "2024-07-10T01:00"],
+            "weathercode": [1, 2],
+            "temperature_2m": [20.0, 19.5],
+        }
+    }
+    client = WeatherClient()
+    with patch("httpx.AsyncClient", return_value=MockAsyncClient([geocode, hourly])):
+        result = await client.get_hourly_forecast("Berlin", date(2024, 7, 10))
+
+    assert isinstance(result, list)
+    assert len(result) == 2
+    first = result[0]
+    assert isinstance(first, HourlyForecast)
+    assert first.timestamp.year == 2024
+    assert first.timestamp.hour == 0

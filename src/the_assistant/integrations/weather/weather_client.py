@@ -1,10 +1,10 @@
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 
-from the_assistant.models.weather import WeatherForecast
+from the_assistant.models.weather import HourlyForecast, WeatherForecast
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +14,7 @@ class WeatherClient:
 
     GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
     FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+    HOURLY_VARS = "temperature_2m,weathercode"
 
     async def _get_coordinates(self, location: str) -> tuple[float, float]:
         """Resolve a location name to latitude and longitude."""
@@ -53,6 +54,35 @@ class WeatherClient:
                     weather_code=int(daily["weathercode"][idx]),
                     temperature_max=float(daily["temperature_2m_max"][idx]),
                     temperature_min=float(daily["temperature_2m_min"][idx]),
+                )
+            )
+        return forecasts
+
+    async def get_hourly_forecast(
+        self, location: str, day: date
+    ) -> list[HourlyForecast]:
+        """Get hourly forecast for a specific day."""
+        lat, lon = await self._get_coordinates(location)
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": self.HOURLY_VARS,
+            "start_date": day.isoformat(),
+            "end_date": day.isoformat(),
+            "timezone": "UTC",
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(self.FORECAST_URL, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+        hourly = data.get("hourly", {})
+        forecasts = []
+        for idx in range(len(hourly.get("time", []))):
+            forecasts.append(
+                HourlyForecast(
+                    timestamp=datetime.fromisoformat(hourly["time"][idx]),
+                    weather_code=int(hourly["weathercode"][idx]),
+                    temperature=float(hourly["temperature_2m"][idx]),
                 )
             )
         return forecasts
