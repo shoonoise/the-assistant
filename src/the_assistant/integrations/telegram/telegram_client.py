@@ -1045,6 +1045,11 @@ async def handle_add_task_command(
 
     parser = TaskParser()
     schedule, instruction = await parser.parse(raw_instruction)
+    if not schedule:
+        await update.message.reply_text(
+            "❌ Could not parse a schedule. Try something like 'every day at 6pm say hi'."
+        )
+        return
 
     await user_service.create_task(
         user.id, raw_instruction, schedule=schedule, instruction=instruction

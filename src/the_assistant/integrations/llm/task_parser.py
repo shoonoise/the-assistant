@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -33,7 +34,7 @@ class TaskParser:
             data = json.loads(content)
             schedule = str(data.get("schedule", ""))
             instruction = str(data.get("instruction", ""))
-        except Exception:
+        except JSONDecodeError:
             schedule = ""
             instruction = content
         return schedule, instruction

@@ -630,3 +630,31 @@ class TestUpdateSettings:
 
         assert mock_update.message.reply_text.called
         assert "register" in mock_update.message.reply_text.call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_add_task_command_parse_failure(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.create_task = AsyncMock()
+
+        parser = AsyncMock()
+        parser.parse.return_value = ("", "say hi")
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.llm.TaskParser",
+                return_value=parser,
+            ),
+        ):
+            mock_context.args = ["some", "text"]
+            await handle_add_task_command(mock_update, mock_context)
+
+        parser.parse.assert_awaited_once_with("some text")
+        user_service.create_task.assert_not_called()
+        assert mock_update.message.reply_text.called
+        assert "parse" in mock_update.message.reply_text.call_args[0][0].lower()

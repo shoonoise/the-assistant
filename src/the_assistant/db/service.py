@@ -205,7 +205,6 @@ class UserService:
         self, user_id: int, raw_instruction: str, schedule: str, instruction: str
     ) -> ScheduledTask:
         """Create a scheduled task for the user."""
-        from .models import ScheduledTask
 
         async with self._session_maker() as session:
             task = ScheduledTask(
@@ -221,8 +220,6 @@ class UserService:
 
     async def list_tasks(self, user_id: int) -> list[ScheduledTask]:
         """Return all scheduled tasks for the user."""
-        from .models import ScheduledTask
-
         async with self._session_maker() as session:
             stmt = select(ScheduledTask).where(ScheduledTask.user_id == user_id)
             result = await session.execute(stmt)
