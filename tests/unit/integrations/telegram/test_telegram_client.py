@@ -12,6 +12,7 @@ from telegram.error import NetworkError, TelegramError
 from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
+    handle_add_countdown_command,
     handle_add_task_command,
     handle_briefing_command,
     handle_google_auth_command,
@@ -654,5 +655,75 @@ class TestUpdateSettings:
 
         parser.parse.assert_awaited_once_with("some text")
         user_service.create_task.assert_not_called()
+        assert mock_update.message.reply_text.called
+        assert "parse" in mock_update.message.reply_text.call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_add_countdown_command(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.create_countdown = AsyncMock()
+
+        parser = AsyncMock()
+        parser.parse.return_value = (datetime(2025, 1, 1, tzinfo=UTC), "party")
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.llm.CountdownParser",
+                return_value=parser,
+            ),
+        ):
+            mock_context.args = ["party", "on", "2025-01-01"]
+            await handle_add_countdown_command(mock_update, mock_context)
+
+        parser.parse.assert_awaited_once_with("party on 2025-01-01")
+        user_service.create_countdown.assert_awaited_once()
+        assert mock_update.message.reply_text.called
+
+    @pytest.mark.asyncio
+    async def test_add_countdown_command_unregistered(self, mock_update, mock_context):
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = ["party"]
+            await handle_add_countdown_command(mock_update, mock_context)
+
+        assert mock_update.message.reply_text.called
+        assert "register" in mock_update.message.reply_text.call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_add_countdown_command_parse_failure(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.create_countdown = AsyncMock()
+
+        parser = AsyncMock()
+        parser.parse.return_value = (None, "party")
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.llm.CountdownParser",
+                return_value=parser,
+            ),
+        ):
+            mock_context.args = ["some", "text"]
+            await handle_add_countdown_command(mock_update, mock_context)
+
+        parser.parse.assert_awaited_once_with("some text")
+        user_service.create_countdown.assert_not_called()
         assert mock_update.message.reply_text.called
         assert "parse" in mock_update.message.reply_text.call_args[0][0].lower()

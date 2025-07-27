@@ -54,6 +54,7 @@ COMMAND_REGISTRY: dict[str, str] = {
     "memory": "List your stored memories",
     "memory_delete": "Delete a memory by its id",
     "add_task": "Create a new scheduled task",
+    "add_countdown": "Add a countdown event",
 }
 
 
@@ -1058,6 +1059,43 @@ async def handle_add_task_command(
     await update.message.reply_text("✅ Task added.")
 
 
+async def handle_add_countdown_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Create a countdown event from user description."""
+    if not update.message or not update.effective_user:
+        return
+
+    raw_text = " ".join(getattr(context, "args", [])).strip()
+    if not raw_text:
+        await update.message.reply_text("Usage: /add_countdown <description>")
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register."
+        )
+        return
+
+    from the_assistant.integrations.llm import CountdownParser
+
+    parser = CountdownParser()
+    event_time, description = await parser.parse(raw_text)
+    if event_time is None:
+        await update.message.reply_text(
+            "❌ Could not parse a date. Try 'my birthday on 2025-05-01'."
+        )
+        return
+
+    await user_service.create_countdown(
+        user.id, description=description, event_time=event_time
+    )
+
+    await update.message.reply_text("✅ Countdown added.")
+
+
 async def handle_status_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1142,6 +1180,7 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("memory", handle_memory_command)
     await client.register_command_handler("memories", handle_memory_command)
     await client.register_command_handler("add_task", handle_add_task_command)
+    await client.register_command_handler("add_countdown", handle_add_countdown_command)
     # Settings conversation handler
     settings_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],

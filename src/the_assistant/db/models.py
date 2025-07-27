@@ -54,6 +54,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    countdowns: Mapped[list["Countdown"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserSetting(Base):
@@ -120,3 +124,23 @@ class ScheduledTask(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="tasks")
+
+
+class Countdown(Base):
+    """User countdown event."""
+
+    __tablename__ = "countdowns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    event_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="countdowns")

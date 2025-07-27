@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.user_settings import SETTING_SCHEMAS
 
-from .models import ScheduledTask, ThirdPartyAccount, User, UserSetting
+from .models import Countdown, ScheduledTask, ThirdPartyAccount, User, UserSetting
 
 
 class UserService:
@@ -222,5 +222,28 @@ class UserService:
         """Return all scheduled tasks for the user."""
         async with self._session_maker() as session:
             stmt = select(ScheduledTask).where(ScheduledTask.user_id == user_id)
+            result = await session.execute(stmt)
+            return result.scalars().all()
+
+    async def create_countdown(
+        self, user_id: int, description: str, event_time: datetime
+    ) -> Countdown:
+        """Create a countdown event for the user."""
+
+        async with self._session_maker() as session:
+            countdown = Countdown(
+                user_id=user_id,
+                description=description,
+                event_time=event_time,
+            )
+            session.add(countdown)
+            await session.commit()
+            await session.refresh(countdown)
+            return countdown
+
+    async def list_countdowns(self, user_id: int) -> list[Countdown]:
+        """Return all countdowns for the user."""
+        async with self._session_maker() as session:
+            stmt = select(Countdown).where(Countdown.user_id == user_id)
             result = await session.execute(stmt)
             return result.scalars().all()
