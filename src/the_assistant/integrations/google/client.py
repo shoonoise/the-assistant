@@ -739,6 +739,7 @@ class GoogleClient:
                 msg_date = self._parse_datetime_string(date_str)
             except Exception:  # pragma: no cover - fallback
                 msg_date = None
+        is_unread = "UNREAD" in raw_message.get("labelIds", [])
 
         return GmailMessage(
             id=raw_message.get("id", ""),
@@ -751,6 +752,7 @@ class GoogleClient:
             body=self._extract_message_body(raw_message.get("payload", {}))
             if include_body
             else "",
+            unread=is_unread,
             raw_data=raw_message if include_raw else None,
             account=self.account,
         )

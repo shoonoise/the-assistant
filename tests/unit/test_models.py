@@ -26,7 +26,10 @@ from the_assistant.models.obsidian import (
 def test_calendar_event_properties():
     """Test CalendarEvent model properties."""
     # Create a calendar event in the future to ensure is_upcoming is True
-    future_time = datetime.now(UTC) + timedelta(minutes=30)
+    now = datetime.now(UTC)
+    future_time = now + timedelta(minutes=30)
+    if future_time.date() != now.date():
+        future_time = now + timedelta(seconds=1)
     event = CalendarEvent(
         id="event123",
         summary="Team Meeting",
@@ -46,7 +49,10 @@ def test_calendar_event_properties():
 
 def test_calendar_event_recurrence():
     """Test CalendarEvent recurrence properties."""
-    future_time = datetime.now(UTC) + timedelta(minutes=30)
+    now = datetime.now(UTC)
+    future_time = now + timedelta(minutes=30)
+    if future_time.date() != now.date():
+        future_time = now + timedelta(seconds=1)
 
     # Test non-recurring event
     non_recurring = CalendarEvent(

@@ -128,6 +128,7 @@ class GmailMessage(BaseAssistantModel):
     to: str = Field(default="", description="Recipient email")
     date: datetime | None = Field(default=None, description="Message date")
     body: str = Field(default="", description="Plain text body")
+    unread: bool = Field(default=False, description="Whether the message is unread")
     raw_data: dict[str, Any] | None = Field(
         default=None, description="Original API response data"
     )
@@ -155,10 +156,8 @@ class GmailMessage(BaseAssistantModel):
     @computed_field
     @property
     def is_unread(self) -> bool:
-        """Check if the message is unread."""
-        if not self.raw_data:
-            return False
-        return "UNREAD" in self.raw_data.get("labelIds", [])
+        """Return the unread status."""
+        return self.unread
 
     @computed_field
     @property
