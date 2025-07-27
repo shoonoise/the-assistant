@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import Field, computed_field
 
@@ -27,6 +27,20 @@ WEATHER_CODE_MAP = {
 }
 
 
+class HourlyForecast(BaseAssistantModel):
+    """Hourly forecast entry."""
+
+    timestamp: datetime = Field(description="Forecast time in UTC")
+    weather_code: int = Field(description="Open-Meteo weather code")
+    temperature: float = Field(description="Temperature (°C)")
+
+    @computed_field
+    @property
+    def condition(self) -> str:
+        """Human readable weather condition."""
+        return WEATHER_CODE_MAP.get(self.weather_code, "Unknown")
+
+
 class WeatherForecast(BaseAssistantModel):
     """Simple weather forecast returned by the Open-Meteo API."""
 
@@ -35,6 +49,10 @@ class WeatherForecast(BaseAssistantModel):
     weather_code: int = Field(description="Open-Meteo weather code")
     temperature_max: float = Field(description="Maximum temperature (°C)")
     temperature_min: float = Field(description="Minimum temperature (°C)")
+    hourly: list[HourlyForecast] | None = Field(
+        default=None,
+        description="Hourly forecast entries for this date (UTC)",
+    )
 
     @computed_field
     @property

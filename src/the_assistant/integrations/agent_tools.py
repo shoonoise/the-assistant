@@ -1,8 +1,11 @@
+from datetime import date
+
 from langchain_core.tools import BaseTool, tool
 
 from .google.client import GoogleClient
 from .mcp_client import get_mcp_tools
 from .telegram.telegram_client import TelegramClient
+from .weather.weather_client import WeatherClient
 
 
 async def _send_message(user_id: int, text: str) -> str:
@@ -28,6 +31,27 @@ async def _get_email(user_id: int, email_id: str, account: str | None = None) ->
     return email.model_dump()
 
 
+async def _get_weather(location: str, day: date | str) -> dict:
+    """Get weather forecast for a specific location and date (hourly precision).
+
+    The provided date must be within the next 16 days, which is the limit of the
+    underlying API.
+    """
+
+    query_date = date.fromisoformat(day) if isinstance(day, str) else day
+    client = WeatherClient()
+    forecasts = await client.get_forecast(location, days=16)
+    forecast_map = {f.forecast_date: f for f in forecasts}
+    if query_date not in forecast_map:
+        raise ValueError(
+            f"Weather for {location} on {query_date.isoformat()} not found"
+        )
+
+    forecast = forecast_map[query_date]
+    forecast.hourly = await client.get_hourly_forecast(location, query_date)
+    return forecast.model_dump()
+
+
 async def get_default_tools(user_id: int) -> list[BaseTool]:
     """Return default agent tools bound to the given user."""
 
@@ -48,7 +72,12 @@ async def get_default_tools(user_id: int) -> list[BaseTool]:
         """Get a full Gmail message by ID."""
         return await _get_email(user_id, email_id, account)
 
+    @tool
+    async def weather(location: str, day: date | str) -> dict:
+        """Get hourly weather forecast for a given location and date (YYYY-MM-DD)."""
+        return await _get_weather(location, day)
+
     # Get MCP tools (including Tavily websearch)
     mcp_tools = await get_mcp_tools()
 
-    return [send_message, get_event, get_email] + mcp_tools
+    return [send_message, get_event, get_email, weather] + mcp_tools
