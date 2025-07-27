@@ -49,12 +49,10 @@ class DailyBriefingInput:
 @dataclass
 class BriefingPromptInput:
     events: list[CalendarEvent]
-    emails_full: list[GmailMessage]
-    emails_snippets: list[GmailMessage]
-    email_total: int
-    weather: WeatherForecast | None
+    emails: list[GmailMessage]
     settings: dict[str, Any]
     current_time: str
+    weather: WeatherForecast | None = None
 
 
 @dataclass
@@ -132,43 +130,56 @@ async def get_user_settings(input: GetUserSettingsInput) -> dict[str, Any]:
 @activity.defn
 async def build_briefing_prompt(input: BriefingPromptInput) -> str:
     """Render context data into a prompt string for the LLM."""
+    MAX_FULL = 10
+    MAX_SNIPPETS = 10
 
-    lines: list[str] = [f"Current time: {input.current_time}"]
+    lines: list[str] = [f"<DATETIME>{input.current_time}</DATETIME>"]
 
     if input.weather:
         w = input.weather
         lines.append(
-            f"Todays' weather: {w.condition}, high {w.temperature_max}°C low {w.temperature_min}°C"
+            f"<WEATHER>{w.condition}, high {w.temperature_max}°C low {w.temperature_min}°C at {w.location}</WEATHER>"
         )
 
     if input.events:
         ev_lines = []
         for e in input.events:
             start = e.start_time.strftime("%Y-%m-%d %H:%M")
-            ev_lines.append(f"- {e.summary} ({start}) {e.location or ''} [{e.account}]")
-        lines.append("<events>" + "\n".join(ev_lines) + "</events>\n")
-
-    if input.emails_full or input.emails_snippets:
-        email_lines = []
-        for e in input.emails_full:
-            email_lines.append(
-                f"<email>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread}\n{e.body}</email>\n"
+            ev_lines.append(
+                f"<EVENT><ACCOUNT>{e.account}</ACCOUNT><SUMMARY>{e.summary}</SUMMARY><START>{start}</START><LOCATION>{e.location}</LOCATION></EVENT>"
             )
-        if input.emails_snippets:
-            email_lines.append("snippets:")
-            for e in input.emails_snippets:
-                email_lines.append(
-                    f"<email_snippet>[{e.account}] {e.subject} from {e.sender} unread:{e.is_unread} snippet:{e.snippet}</email_snippet>"
+        lines.append("<EVENTS>" + "\n".join(ev_lines) + "</EVENTS>")
+
+    if input.emails:
+        full_lines: list[str] = []
+        snippet_lines: list[str] = []
+        for idx, e in enumerate(input.emails):
+            if idx < MAX_FULL:
+                full_lines.append(
+                    f"<EMAIL><ACCOUNT>{e.account}</ACCOUNT><SUBJECT>{e.subject}</SUBJECT><SENDER>{e.sender}</SENDER><UNREAD>{e.is_unread}</UNREAD><BODY>{e.body}</BODY></EMAIL>"
                 )
-        lines.append(
-            f"Inbox emails previews (total: {input.email_total}):\n"
-            + "<emails>"
-            + "\n".join(email_lines)
-            + "</emails>"
-        )
+            elif idx < MAX_FULL + MAX_SNIPPETS:
+                snippet_lines.append(
+                    f"<EMAIL><ACCOUNT>{e.account}</ACCOUNT><SUBJECT>{e.subject}</SUBJECT><SENDER>{e.sender}</SENDER><UNREAD>{e.is_unread}</UNREAD><SNIPPET>{e.snippet}</SNIPPET></EMAIL>"
+                )
+            else:
+                break
+        if full_lines:
+            lines.append(
+                f"Today emails (total {len(full_lines)}):\n<EMAILS>\n"
+                + "\n".join(full_lines)
+                + "\n</EMAILS>"
+            )
+        if snippet_lines:
+            lines.append(
+                "Snippets:\n<EMAIL_SNIPPETS>\n"
+                + "\n".join(snippet_lines)
+                + "\n</EMAIL_SNIPPETS>"
+            )
+        lines.append(f"Overall in the inbox: {len(input.emails)} emails")
 
     if input.settings:
         set_lines = "\n".join(f"- {k}: {v}" for k, v in input.settings.items())
-        lines.append("User settings:\n" + set_lines)
+        lines.append("<SETTINGS>\n" + set_lines + "\n</SETTINGS>")
 
     return "\n\n".join(lines)

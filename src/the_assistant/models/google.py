@@ -44,8 +44,8 @@ class CalendarEvent(BaseAssistantModel):
     recurring_event_id: str | None = Field(
         default=None, description="ID of the recurring event series (if applicable)"
     )
-    raw_data: dict[str, Any] = Field(
-        default_factory=dict, description="Original API response data"
+    raw_data: dict[str, Any] | None = Field(
+        default=None, description="Original API response data"
     )
     account: str | None = Field(default=None, description="Google account identifier")
 
@@ -128,16 +128,36 @@ class GmailMessage(BaseAssistantModel):
     to: str = Field(default="", description="Recipient email")
     date: datetime | None = Field(default=None, description="Message date")
     body: str = Field(default="", description="Plain text body")
-    raw_data: dict[str, Any] = Field(
-        default_factory=dict, description="Original API response data"
+    unread: bool = Field(default=False, description="Whether the message is unread")
+    raw_data: dict[str, Any] | None = Field(
+        default=None, description="Original API response data"
     )
     account: str | None = Field(default=None, description="Google account identifier")
 
     @computed_field
     @property
+    def participants(self) -> list[str]:
+        """Return all message participants from sender, to, and cc fields."""
+        parts: list[str] = []
+        if self.sender:
+            parts.extend([p.strip() for p in self.sender.split(",") if p.strip()])
+        if self.to:
+            parts.extend([p.strip() for p in self.to.split(",") if p.strip()])
+        if self.raw_data:
+            headers = {
+                h["name"].lower(): h["value"]
+                for h in self.raw_data.get("payload", {}).get("headers", [])
+            }
+            cc = headers.get("cc")
+            if cc:
+                parts.extend([p.strip() for p in cc.split(",") if p.strip()])
+        return list(dict.fromkeys(parts))
+
+    @computed_field
+    @property
     def is_unread(self) -> bool:
-        """Check if the message is unread."""
-        return "UNREAD" in self.raw_data.get("labelIds", [])
+        """Return the unread status."""
+        return self.unread
 
     @computed_field
     @property
