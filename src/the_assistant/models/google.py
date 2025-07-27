@@ -135,6 +135,25 @@ class GmailMessage(BaseAssistantModel):
 
     @computed_field
     @property
+    def participants(self) -> list[str]:
+        """Return all message participants from sender, to, and cc fields."""
+        parts: list[str] = []
+        if self.sender:
+            parts.extend([p.strip() for p in self.sender.split(",") if p.strip()])
+        if self.to:
+            parts.extend([p.strip() for p in self.to.split(",") if p.strip()])
+        if self.raw_data:
+            headers = {
+                h["name"].lower(): h["value"]
+                for h in self.raw_data.get("payload", {}).get("headers", [])
+            }
+            cc = headers.get("cc")
+            if cc:
+                parts.extend([p.strip() for p in cc.split(",") if p.strip()])
+        return list(dict.fromkeys(parts))
+
+    @computed_field
+    @property
     def is_unread(self) -> bool:
         """Check if the message is unread."""
         if not self.raw_data:

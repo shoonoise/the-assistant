@@ -1,5 +1,5 @@
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -72,7 +72,11 @@ class DailyBriefing:
             for account in accounts
         ]
         email_lists = await asyncio.gather(*email_tasks)
-        emails = [e for sub in email_lists for e in sub]
+        emails = sorted(
+            [e for sub in email_lists for e in sub],
+            key=lambda m: m.date or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
 
         weather = await workflow.execute_activity(
             get_weather_forecast,
@@ -86,8 +90,6 @@ class DailyBriefing:
             BriefingPromptInput(
                 events=events,
                 emails=emails,
-                max_full=15,
-                max_snippets=20,
                 weather=weather[0] if weather else None,
                 settings=settings,
                 current_time=workflow.now().strftime("%Y-%m-%d %A %H:%M"),
