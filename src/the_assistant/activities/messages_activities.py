@@ -14,11 +14,13 @@ logger = activity.logger
 
 BRIEF_PROMPT = """
 You are a thoughtful and friendly personal assistant writing a **daily briefing** for the USER, using given CONTEXT.
-Consider time, day of the week (worksay, weekend), time of the year.
+Consider time, day of the week (workday, weekend), time of the year.
 
 Your tone should be natural, human, and warm — like a trusted assistant who knows the user's habits and priorities.
 Keep it concise, engaging, and helpful. This is a friendly secretary message, not a formal report.
 Reference dates in natural ways, e.g. "This Friday", "Tomorrow", "Yesterday", "Next week", "In 2 days"
+
+**IMPORTANT**: Pay special attention to the USER PROFILE section - this contains crucial information about the user's preferences, habits, priorities, and personal context that should heavily influence your briefing style and content focus.
 
 Use this structure:
 - Start with a **short, warm greeting**, comment on the **day of the week and weather**.
@@ -31,10 +33,81 @@ Use this structure:
 - Never just list all events or emails. Use discretion.
 
 Be brief, human, and helpful. Max response length: 4000 characters. Use markdown.
-Use web search tool to find an interesting fact about today.
+Use web search tool to find the most important and relevant news of the day.
 
 <CONTEXT>{data}</CONTEXT>
 """
+
+
+def _format_user_profile(settings: dict[str, Any]) -> str:
+    """Format user settings into a comprehensive user profile for the LLM."""
+    if not settings:
+        return ""
+
+    profile_sections = []
+
+    # Personal preferences and habits
+    personal_items = []
+    work_items = []
+    communication_items = []
+    schedule_items = []
+    other_items = []
+
+    for key, value in settings.items():
+        key_lower = key.lower()
+
+        # Categorize settings based on key patterns
+        if any(
+            word in key_lower
+            for word in ["prefer", "like", "favorite", "habit", "routine", "style"]
+        ):
+            personal_items.append(f"• {key}: {value}")
+        elif any(
+            word in key_lower
+            for word in ["work", "job", "career", "office", "meeting", "project"]
+        ):
+            work_items.append(f"• {key}: {value}")
+        elif any(
+            word in key_lower
+            for word in ["email", "message", "notification", "communication", "contact"]
+        ):
+            communication_items.append(f"• {key}: {value}")
+        elif any(
+            word in key_lower
+            for word in ["schedule", "time", "calendar", "availability", "timezone"]
+        ):
+            schedule_items.append(f"• {key}: {value}")
+        else:
+            other_items.append(f"• {key}: {value}")
+
+    # Build profile sections with meaningful headers
+    if personal_items:
+        profile_sections.append(
+            "**Personal Preferences & Habits:**\n" + "\n".join(personal_items)
+        )
+
+    if work_items:
+        profile_sections.append(
+            "**Work & Professional Context:**\n" + "\n".join(work_items)
+        )
+
+    if communication_items:
+        profile_sections.append(
+            "**Communication Preferences:**\n" + "\n".join(communication_items)
+        )
+
+    if schedule_items:
+        profile_sections.append(
+            "**Schedule & Time Preferences:**\n" + "\n".join(schedule_items)
+        )
+
+    if other_items:
+        profile_sections.append("**Additional Context:**\n" + "\n".join(other_items))
+
+    if profile_sections:
+        return "<USER_PROFILE>\n" + "\n\n".join(profile_sections) + "\n</USER_PROFILE>"
+
+    return ""
 
 
 @dataclass
@@ -179,7 +252,6 @@ async def build_briefing_prompt(input: BriefingPromptInput) -> str:
         lines.append(f"Overall in the inbox: {len(input.emails)} emails")
 
     if input.settings:
-        set_lines = "\n".join(f"- {k}: {v}" for k, v in input.settings.items())
-        lines.append("<SETTINGS>\n" + set_lines + "\n</SETTINGS>")
+        lines.append(_format_user_profile(input.settings))
 
     return "\n\n".join(lines)
