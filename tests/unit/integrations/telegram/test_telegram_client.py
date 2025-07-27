@@ -12,6 +12,7 @@ from telegram.error import NetworkError, TelegramError
 from the_assistant.integrations.telegram.constants import SettingKey
 from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
+    handle_add_task_command,
     handle_briefing_command,
     handle_google_auth_command,
     handle_ignore_email_command,
@@ -582,3 +583,50 @@ class TestUpdateSettings:
         assert user_service.set_setting.await_count == 1
         args = user_service.set_setting.call_args[0]
         assert len(args[2]) == 1
+
+    @pytest.mark.asyncio
+    async def test_add_task_command(self, mock_update, mock_context):
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.create_task = AsyncMock()
+
+        parser = AsyncMock()
+        parser.parse.return_value = ("daily 6pm", "say hi")
+
+        with (
+            patch(
+                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.llm.TaskParser",
+                return_value=parser,
+            ),
+        ):
+            mock_context.args = ["every", "day", "at", "6pm", "say", "hi"]
+            await handle_add_task_command(mock_update, mock_context)
+
+        parser.parse.assert_awaited_once_with("every day at 6pm say hi")
+        user_service.create_task.assert_awaited_once_with(
+            user.id,
+            "every day at 6pm say hi",
+            schedule="daily 6pm",
+            instruction="say hi",
+        )
+        assert mock_update.message.reply_text.called
+
+    @pytest.mark.asyncio
+    async def test_add_task_command_unregistered(self, mock_update, mock_context):
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = ["do", "something"]
+            await handle_add_task_command(mock_update, mock_context)
+
+        assert mock_update.message.reply_text.called
+        assert "register" in mock_update.message.reply_text.call_args[0][0].lower()
