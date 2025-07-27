@@ -1,11 +1,13 @@
 """Tests for the Temporal worker."""
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import the_assistant.worker as worker_module
 from the_assistant.worker import main, run_worker
 
 # Suppress false positive warnings from mocking async operations
@@ -155,9 +157,6 @@ class TestWorker:
 
     def test_worker_activities_imported(self):
         """Test that all required activities are imported."""
-        # Import the worker module to check imports
-        import the_assistant.worker as worker_module
-
         # Check that activities are available
         assert hasattr(worker_module, "get_calendar_events")
         assert hasattr(worker_module, "get_upcoming_events")
@@ -169,8 +168,6 @@ class TestWorker:
 
     def test_worker_workflows_imported(self):
         """Test that all required workflows are imported."""
-        import the_assistant.worker as worker_module
-
         # Check that workflows are available
         assert hasattr(worker_module, "DailyBriefing")
 
@@ -241,6 +238,5 @@ class TestWorker:
 
         mock_logging_config.assert_called()
         call_args = mock_logging_config.call_args
-        import logging
 
         assert call_args[1]["level"] == logging.DEBUG

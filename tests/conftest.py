@@ -5,12 +5,14 @@ This module provides common fixtures, test markers, and configuration
 for all test categories (unit, integration, obsidian-specific).
 """
 
+import asyncio
 import os
 from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from the_assistant.integrations.obsidian import MarkdownParser, MetadataExtractor
 
@@ -212,8 +214,6 @@ date: 2025-01-15
 @pytest.fixture
 def event_loop():
     """Create an event loop for async tests."""
-    import asyncio
-
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -254,8 +254,6 @@ class TestHelpers:
     def create_test_note(content: str, frontmatter: dict | None = None) -> str:
         """Create a test note with optional frontmatter."""
         if frontmatter:
-            import yaml
-
             frontmatter_str = yaml.dump(frontmatter, default_flow_style=False)
             return f"---\n{frontmatter_str}---\n\n{content}"
         return content

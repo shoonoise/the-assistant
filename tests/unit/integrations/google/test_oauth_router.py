@@ -5,20 +5,18 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import the_assistant.integrations.google.oauth_router as oauth_router
+
 
 def test_missing_jwt_secret_no_error():
     """Importing oauth_router without JWT_SECRET should not fail."""
     with patch.dict(os.environ, {}, clear=True):
-        import the_assistant.integrations.google.oauth_router as oauth_router
-
         importlib.reload(oauth_router)
 
 
 @pytest.mark.asyncio
 async def test_oauth_callback_sends_notification():
     """OAuth callback notifies the user via Telegram."""
-
-    import the_assistant.integrations.google.oauth_router as oauth_router
 
     user = SimpleNamespace(id=1, telegram_chat_id=456)
     service = AsyncMock()

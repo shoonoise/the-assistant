@@ -5,7 +5,7 @@ These tests verify the functionality of the ObsidianClient class,
 which integrates all components for interacting with Obsidian vaults.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -509,8 +509,6 @@ class TestObsidianClient:
 
     async def test_filter_by_trip_tag_integration(self):
         """Test filtering notes by 'trip' tag using real vault data."""
-        from the_assistant.integrations.obsidian.models import NoteFilters
-
         # Use real ObsidianClient with actual vault path
         real_client = ObsidianClient("obsidian_vault", user_id=1)
 
@@ -566,8 +564,6 @@ class TestObsidianClient:
 
     async def test_single_tag_filter_edge_cases(self):
         """Test edge cases for single tag filtering."""
-        from the_assistant.integrations.obsidian.models import NoteFilters
-
         real_client = ObsidianClient("obsidian_vault", user_id=1)
 
         # Test with non-existent tag
@@ -595,10 +591,6 @@ class TestObsidianClient:
 
     async def test_trip_date_filtering_logic(self):
         """Test the specific filtering logic for trip notes with date ranges."""
-        from datetime import date, timedelta
-
-        from the_assistant.integrations.obsidian.models import NoteFilters
-
         real_client = ObsidianClient("obsidian_vault", user_id=1)
 
         # Get current month date range

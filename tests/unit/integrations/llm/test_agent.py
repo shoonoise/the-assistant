@@ -1,4 +1,5 @@
 import pytest
+from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.language_models.fake_chat_models import FakeChatModel
 from langchain_core.messages import AIMessage
 
@@ -38,8 +39,6 @@ async def test_llm_agent_runs(monkeypatch):
 @pytest.mark.asyncio
 async def test_llm_agent_langsmith(monkeypatch):
     tracer_called = False
-
-    from langchain.callbacks.base import BaseCallbackHandler
 
     class DummyTracer(BaseCallbackHandler):
         def __init__(self, project_name: str | None = None) -> None:
