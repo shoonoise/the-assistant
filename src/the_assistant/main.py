@@ -70,6 +70,12 @@ async def auth_error(error: str | None = None, message: str | None = None):
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for load balancers."""
+    return {"status": "healthy", "service": "the-assistant"}
+
+
 @app.get("/test-calendar")
 async def test_calendar(user_id: int = 1, account: str = "personal"):
     """Test endpoint to verify Google Calendar access works."""

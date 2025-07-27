@@ -1,0 +1,69 @@
+# Google Cloud Build configuration
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA', '.']
+  
+  # Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA']
+  
+  # Deploy to Cloud Run - Main App
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'the-assistant-app'
+      - '--image=gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8000'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--max-instances=10'
+      - '--set-env-vars=TEMPORAL_HOST=$$TEMPORAL_HOST,DATABASE_URL=$$DATABASE_URL'
+      - '--set-secrets=DB_ENCRYPTION_KEY=db-encryption-key:latest,JWT_SECRET=jwt-secret:latest,TELEGRAM_TOKEN=telegram-token:latest'
+  
+  # Deploy to Cloud Run - Worker
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'the-assistant-worker'
+      - '--image=gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--memory=1Gi'
+      - '--cpu=1'
+      - '--max-instances=5'
+      - '--set-env-vars=TEMPORAL_HOST=$$TEMPORAL_HOST,DATABASE_URL=$$DATABASE_URL'
+      - '--set-secrets=DB_ENCRYPTION_KEY=db-encryption-key:latest,JWT_SECRET=jwt-secret:latest,TELEGRAM_TOKEN=telegram-token:latest'
+      - '--args=python,-m,the_assistant.worker'
+  
+  # Deploy to Cloud Run - Telegram Bot
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'the-assistant-telegram'
+      - '--image=gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--max-instances=3'
+      - '--set-env-vars=TEMPORAL_HOST=$$TEMPORAL_HOST,DATABASE_URL=$$DATABASE_URL'
+      - '--set-secrets=DB_ENCRYPTION_KEY=db-encryption-key:latest,JWT_SECRET=jwt-secret:latest,TELEGRAM_TOKEN=telegram-token:latest'
+      - '--args=python,-m,the_assistant.telegram_bot'
+
+substitutions:
+  _TEMPORAL_HOST: 'temporal-server-url:7233'  # Update with your Temporal Cloud endpoint
+
+images:
+  - 'gcr.io/$PROJECT_ID/the-assistant:$COMMIT_SHA'
