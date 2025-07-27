@@ -2,152 +2,121 @@
 inclusion: always
 ---
 
-# Technical Implementation Guidelines
+# CRITICAL EXECUTION RULES
 
-## Critical Execution Rules
+## Python Environment (MANDATORY - WILL FAIL OTHERWISE)
+```bash
+# ✅ CORRECT - Always use uv
+uv run python script.py
+uvx package_name
 
-**Python Environment (MANDATORY):**
-- ALWAYS use `uv run python ...` - never bare `python` commands
-- Use `uvx package_name` for one-off utilities
-- Virtual environment managed by uv - direct python calls will fail
+# ❌ WRONG - Will fail in this environment
+python script.py
+pip install package
+```
 
-**Code Style Requirements:**
-- Python 3.13+ built-in types: `dict`, `list`, `tuple` (not `Dict`, `List`, `Tuple`)
-- Type hints REQUIRED on ALL function signatures and return types
-- snake_case naming for files, functions, variables
-- Async/await patterns consistently throughout
-- Import order: standard library, third-party, local modules (with blank line separation)
+## Code Style (NON-NEGOTIABLE)
+- **Type hints**: REQUIRED on ALL functions: `def func(x: str) -> dict[str, int]:`
+- **Built-in types**: Use `dict`, `list`, `tuple` (NOT `Dict`, `List`, `Tuple`)
+- **Naming**: snake_case for files/functions/variables (NEVER camelCase)
+- **Async**: Use async/await consistently throughout
+- **Imports**: ALWAYS at top of file - Standard library → Third-party → Local (blank line separated)
 
-## Core Technology Stack
+## Architecture Patterns (TEMPORAL-FIRST)
 
-- **Temporal**: Workflow orchestration - use for business logic and external service coordination
-- **FastAPI**: Web framework for webhooks and API endpoints
-- **SQLAlchemy + Alembic**: Database ORM with async sessions and migrations
-- **Pydantic**: Data validation and serialization for all models
-- **Docker Compose**: Development environment orchestration
-
-## Temporal Architecture Patterns
-
-**Workflows** - Orchestration only:
+### Workflows = Orchestration Only
 ```python
 @workflow.defn
-class MyWorkflow:
+class ProcessTripWorkflow:
     @workflow.run
-    async def run(self, input_data: MyInput) -> MyOutput:
-        result = await workflow.execute_activity(
-            my_activity,
-            input_data,
-            start_to_close_timeout=timedelta(minutes=5)
+    async def run(self, trip_data: TripInput) -> TripResult:
+        # Orchestrate activities, handle state
+        calendar_events = await workflow.execute_activity(
+            get_calendar_events,
+            trip_data.date_range,
+            start_to_close_timeout=timedelta(minutes=2)
         )
-        return result
+        return TripResult(events=calendar_events)
 ```
 
-**Activities** - Atomic external operations:
+### Activities = Atomic External Operations
 ```python
 @activity.defn
-async def my_activity(input_data: MyInput) -> MyOutput:
-    # Must be idempotent and handle retries gracefully
-    # Fail fast on authentication/configuration errors
-    pass
+async def get_calendar_events(date_range: DateRange) -> list[CalendarEvent]:
+    """Must be idempotent - can be retried safely"""
+    client = GoogleClient()
+    return await client.get_events(date_range)
 ```
 
-**Error Handling:**
-- Use `RetryPolicy` for activities with exponential backoff
-- Structured logging with workflow_id and activity_id context
-- Fail fast on authentication/configuration errors
-
-## Development Commands
-
-**Setup:**
-```bash
-uv sync --group dev          # Install dependencies
-uv run lefthook install      # Setup git hooks
+### Integration Clients = API Wrappers
+```python
+class GoogleClient:
+    async def get_events(self, date_range: DateRange) -> list[CalendarEvent]:
+        """Return Pydantic models, not raw JSON"""
+        # Handle auth, retries, rate limits
+        pass
 ```
 
-**Quality & Testing:**
+## Essential Commands
 ```bash
-make fix                     # Auto-format and lint
-make test                    # Run test suite
-make test-cov               # Run with coverage
-```
+# Setup
+uv sync --group dev && uv run lefthook install
 
-**Services:**
-```bash
+# Development cycle
+make fix && make test        # Format, lint, test
 make serve                   # Start FastAPI server
 docker-compose up -d         # Start all services
-```
 
-**Database:**
-```bash
+# Database migrations
 uv run python scripts/create_migration.py "description"
 uv run python scripts/init_db_with_migrations.py
 ```
 
-## Configuration & Security
+## Security & Configuration (CRITICAL)
 
-**Environment Variables:**
-- Access through centralized `src/the_assistant/settings.py`
-- Use Pydantic `BaseSettings` for validation
-- Never hardcode configuration values
+### Secrets = Files Only
+```bash
+# ✅ CORRECT - Secrets as mounted files
+/secrets/google_credentials.json
+/secrets/telegram_token
 
-**Secrets Management:**
-- Mount secrets as files in `/secrets/` directory
-- OAuth tokens stored in database with encryption
-- NEVER store secrets in environment variables or code
-
-**Database:**
-- Use Alembic for schema migrations
-- Async SQLAlchemy sessions throughout
-- Connection pooling configured in `database.py`
-
-## Integration Client Patterns
-
-**Client Structure:**
-```python
-class ServiceClient:
-    def __init__(self, credentials: ServiceCredentials):
-        self.credentials = credentials
-        self._service = None
-    
-    async def _get_service(self):
-        if not self._service:
-            # Initialize service with credentials
-            pass
-        return self._service
+# ❌ WRONG - Never in environment variables
+GOOGLE_CREDENTIALS="{...}"
 ```
 
-**Requirements:**
-- Wrap ALL external API calls with proper exception handling
-- Return structured Pydantic models, not raw JSON
-- Implement exponential backoff for rate limits
-- Named as `{service}_client.py` (e.g., `google_client.py`)
-
-## Testing Requirements
-
-**Unit Tests:**
+### Settings Pattern
 ```python
+# Access config through centralized settings
+from the_assistant.settings import get_settings
+settings = get_settings()
+```
+
+## File Organization (STRICT STRUCTURE)
+```
+src/the_assistant/
+├── workflows/           # One workflow per file
+├── activities/          # Grouped by domain (google_activities.py)
+├── integrations/        # Named {service}_client.py
+├── models/             # Pydantic models by domain
+└── db/                 # Database operations
+```
+
+## Testing Patterns
+```python
+# Unit tests - Mock everything external
 @pytest.mark.asyncio
-async def test_activity_function():
-    with patch('external_service') as mock_service:
-        result = await my_activity(test_input)
-        assert result.expected_field == "expected_value"
-```
+async def test_get_calendar_events():
+    with patch('google_client.GoogleClient') as mock:
+        result = await get_calendar_events(date_range)
+        assert isinstance(result, list)
 
-**Temporal Workflow Tests:**
-```python
-async def test_workflow():
+# Workflow tests - Use Temporal test framework
+async def test_trip_workflow():
     async with WorkflowEnvironment() as env:
-        async with Worker(env.client, task_queue="test"):
-            result = await env.client.execute_workflow(
-                MyWorkflow.run,
-                test_input,
-                id="test-workflow",
-                task_queue="test"
-            )
+        result = await env.client.execute_workflow(
+            ProcessTripWorkflow.run,
+            trip_input,
+            id="test-trip",
+            task_queue="test"
+        )
 ```
-
-**Testing Strategy:**
-- Mock ALL external integrations in unit tests
-- Use Temporal test framework for workflow testing
-- Integration tests with real services using test data only
-- Test retry logic and error handling paths
