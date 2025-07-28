@@ -161,12 +161,19 @@ class PersistentKeyboardManager:
             logger.error(f"Failed to send keyboard initialization: {e}")
 
 
-# Global keyboard manager for convenience
-GLOBAL_KEYBOARD_MANAGER = PersistentKeyboardManager()
+_keyboard_manager: PersistentKeyboardManager | None = None
+
+
+def get_keyboard_manager() -> PersistentKeyboardManager:
+    """Return a shared instance of the persistent keyboard manager."""
+    global _keyboard_manager
+    if _keyboard_manager is None:
+        _keyboard_manager = PersistentKeyboardManager()
+    return _keyboard_manager
 
 
 async def reply_with_keyboard(
     update: Update, text: str, parse_mode: str = ParseMode.HTML
 ) -> None:
     """Convenience helper to send a message with the persistent keyboard."""
-    await GLOBAL_KEYBOARD_MANAGER.send_with_keyboard(update, text, parse_mode)
+    await get_keyboard_manager().send_with_keyboard(update, text, parse_mode)
