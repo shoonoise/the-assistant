@@ -113,7 +113,7 @@ class TickTickClient:
         return [TickTask.from_ticktask(item) for item in payload]
 
     async def get_tasks_ahead(self, days: int = 7) -> list[TickTask]:
-        start = date.today()
+        start = datetime.now(UTC).date()
         end = start + timedelta(days=days - 1)
         payload = await self._request(
             "/task",
