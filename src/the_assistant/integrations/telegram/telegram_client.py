@@ -718,6 +718,19 @@ async def handle_google_auth_command(
     args = getattr(context, "args", [])
     account = args[0] if args else None
 
+    if account is None:
+        existing_accounts = await user_service.get_user_accounts(user.id, "google")
+        if existing_accounts:
+            keyboard_manager = PersistentKeyboardManager()
+            accounts_list = ", ".join(existing_accounts)
+            await update.message.reply_text(
+                "✅ You are already authenticated with Google for accounts: "
+                f"{accounts_list}.\n\nUse /google_auth &lt;account&gt; to add"
+                " another account.",
+                reply_markup=keyboard_manager.create_main_keyboard(),
+            )
+            return
+
     client = GoogleClient(user.id, account=account)
     if await client.is_authenticated():
         keyboard_manager = PersistentKeyboardManager()

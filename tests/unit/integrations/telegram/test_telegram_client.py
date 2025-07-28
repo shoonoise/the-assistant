@@ -309,6 +309,31 @@ class TestTelegramClient:
             assert "/start" in call_args
 
     @pytest.mark.asyncio
+    async def test_handle_google_auth_command_existing_accounts(
+        self, mock_update, mock_context
+    ):
+        """When no account is provided, existing accounts are reported."""
+
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_user_accounts = AsyncMock(return_value=["personal", "work"])
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = []
+            await handle_google_auth_command(mock_update, mock_context)
+
+            user_service.get_user_accounts.assert_awaited_once_with(user.id, "google")
+            mock_update.message.reply_text.assert_called_once()
+            sent_text = mock_update.message.reply_text.call_args[0][0]
+            assert "already" in sent_text.lower()
+            assert "personal" in sent_text
+            assert "work" in sent_text
+
+    @pytest.mark.asyncio
     async def test_handle_briefing_command_success(self, mock_update, mock_context):
         """Test successful briefing command execution."""
         user = SimpleNamespace(id=1, telegram_chat_id=123)
