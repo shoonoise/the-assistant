@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # MCP
     tavily_api_key: str | None = Field(None, env="TAVILY_API_KEY")
 
+    # TickTick
+    ticktick_username: str | None = Field(None, env="TICKTICK_USERNAME")
+    ticktick_password: str | None = Field(None, env="TICKTICK_PASSWORD")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(
