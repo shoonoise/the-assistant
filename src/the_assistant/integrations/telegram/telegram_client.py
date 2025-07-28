@@ -11,7 +11,6 @@ from telegram import (
     Bot,
     BotCommand,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     Update,
 )
 from telegram.constants import ParseMode
@@ -19,6 +18,8 @@ from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
+    BaseHandler,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
@@ -34,9 +35,14 @@ from the_assistant.integrations.google.client import GoogleClient
 from the_assistant.integrations.google.oauth_state import create_state_jwt
 from the_assistant.settings import get_settings
 
-from .constants import SETTINGS_LABEL_MAP, ConversationState, SettingKey
+from .constants import (
+    SETTINGS_LABEL_LOOKUP,
+    ConversationState,
+    SettingKey,
+)
 from .enhanced_handlers import MessageFormatter
 from .persistent_keyboard import PersistentKeyboardManager
+from .settings_interface import SettingsInterfaceManager
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +171,7 @@ class TelegramClient:
 
         logger.info(f"Registered handler for command: /{command}")
 
-    async def register_handler(self, handler: ConversationHandler) -> None:
+    async def register_handler(self, handler: BaseHandler) -> None:
         """Register a generic Telegram handler."""
 
         self._extra_handlers.append(handler)
@@ -244,7 +250,12 @@ class TelegramClient:
         )
 
         # Send the error message with markdown formatting
-        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            error_message,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -444,8 +455,10 @@ async def handle_briefing_command(
     logger.debug(f"Briefing requested in chat {chat_id}")
 
     # Send an acknowledgment message
+    keyboard_manager = PersistentKeyboardManager()
     await update.message.reply_text(
-        "🔄 Generating your briefing... This may take a moment."
+        "🔄 Generating your briefing... This may take a moment.",
+        reply_markup=keyboard_manager.create_main_keyboard(),
     )
     logger.info(f"Received briefing request from telegram user {telegram_user_id}")
 
@@ -455,8 +468,10 @@ async def handle_briefing_command(
         user = await user_service.get_user_by_telegram_chat_id(telegram_user_id)
 
         if not user:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                "❌ You need to register first. Please use /start to register."
+                "❌ You need to register first. Please use /start to register.",
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             logger.warning(
                 f"Unregistered user {telegram_user_id} tried to use /briefing"
@@ -566,98 +581,85 @@ async def handle_settings_command(
         "Use /help to see all available commands\\."
     )
 
-    await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        settings_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
     logger.info(f"Sent comprehensive settings to user {user_id}")
 
 
 async def start_update_settings(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
-    """Start the settings update conversation."""
+    """Display inline keyboard for selecting a setting to update."""
 
     if not update.message:
         return ConversationHandler.END
 
-    keyboard = [
-        ["How to greet", "Briefing time"],
-        ["About me", "Location"],
-    ]
+    keyboard_manager = SettingsInterfaceManager()
     await update.message.reply_text(
         "Please choose which setting you want to update:",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
+        reply_markup=keyboard_manager.create_settings_keyboard(),
     )
-    return ConversationState.SELECT_SETTING
+    return ConversationHandler.END
 
 
-async def select_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle the user's setting choice."""
+async def handle_setting_value_input(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle user input for a setting value after inline selection."""
 
-    if not update.message:
-        return ConversationHandler.END
+    if not update.message or update.message.text is None or not update.effective_user:
+        return
 
-    choice = update.message.text.strip()  # type: ignore[possibly-unbound-attribute]
-    if choice not in SETTINGS_LABEL_MAP:
-        await update.message.reply_text(
-            "Use the buttons to pick one of the available options."
-        )
-        return ConversationState.SELECT_SETTING
-
-    user_data = cast(dict[str, Any], context.user_data)
-    user_data["setting_key"] = SETTINGS_LABEL_MAP[choice]
-    user_data["setting_label"] = choice
-    await update.message.reply_text(
-        f"Enter the new value for '{choice}':",
-        reply_markup=ReplyKeyboardRemove(),
+    pending_key = cast(
+        str | None, cast(dict[str, Any], context.user_data).get("pending_setting")
     )
-    return ConversationState.ENTER_VALUE
-
-
-async def save_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Save the provided setting value."""
-
-    if not update.message or not update.effective_user:
-        return ConversationHandler.END
-
-    value = update.message.text.strip()  # type: ignore[possibly-unbound-attribute]
-    user_data = cast(dict[str, Any], context.user_data)
-    setting_key = cast(SettingKey | None, user_data.get("setting_key"))
-    setting_label = cast(str | None, user_data.get("setting_label")) or setting_key
-
-    if setting_key is None:
-        return ConversationHandler.END
+    if not pending_key:
+        return
 
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
-        raise ValueError("User not registered")
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
+        cast(dict[str, Any], context.user_data).pop("pending_setting", None)
+        return
 
-    if setting_key is SettingKey.GREET and not value:
+    value = update.message.text.strip()
+
+    key_enum = SettingKey(pending_key)
+    if key_enum is SettingKey.GREET and not value:
         value = "first_name"
 
-    await user_service.set_setting(user.id, setting_key, value)
+    await user_service.set_setting(user.id, key_enum, value)
 
+    label = SETTINGS_LABEL_LOOKUP.get(key_enum, pending_key)
+    keyboard_manager = PersistentKeyboardManager()
     await update.message.reply_text(
-        f"{setting_label} updated to: {value}", reply_markup=ReplyKeyboardRemove()
+        f"{label} updated to: {value}",
+        reply_markup=keyboard_manager.create_main_keyboard(),
     )
 
-    user_data.pop("setting_key", None)
-    user_data.pop("setting_label", None)
-
-    return ConversationHandler.END
+    cast(dict[str, Any], context.user_data).pop("pending_setting", None)
 
 
 async def cancel_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancel the settings update conversation."""
+    """Generic cancel handler for conversations."""
 
     if update.message:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "Settings update cancelled.", reply_markup=ReplyKeyboardRemove()
+            "Operation cancelled.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
-    user_data = cast(dict[str, Any], context.user_data)
-    user_data.pop("setting_key", None)
-    user_data.pop("setting_label", None)
+
+    cast(dict[str, Any], context.user_data).pop("pending_setting", None)
     return ConversationHandler.END
 
 
@@ -683,8 +685,10 @@ async def handle_google_auth_command(
 
     user = await user_service.get_user_by_telegram_chat_id(chat_user.id)
     if not user:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -693,13 +697,15 @@ async def handle_google_auth_command(
 
     client = GoogleClient(user.id, account=account)
     if await client.is_authenticated():
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
             "✅ You are already authenticated with Google.\n\n"
             "**Connected Services:**\n"
             "• Google Calendar\n"
             "• Gmail\n"
             "• Google Drive (if needed)\n\n"
-            "Your Google integration is working properly!"
+            "Your Google integration is working properly!",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -717,7 +723,12 @@ async def handle_google_auth_command(
         "• Trip and event reminders\n\n"
         "You'll receive a confirmation message once the authentication is completed."
     )
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
     logger.info(f"Sent Google auth link to user {chat_user.id}")
 
 
@@ -727,61 +738,12 @@ async def handle_ignore_email_command(
 ) -> None:
     """Add an email pattern to the ignored list for the user."""
 
-    if not update.message or not update.effective_user:
-        logger.warning("Received ignore_email command without message or user")
-        return
-
-    args = getattr(context, "args", [])
-    if not args:
-        # Show usage information
-        usage_message = (
-            "📧 **Email Ignore Patterns**\n\n"
-            "**Usage:** `/ignore\\_email <pattern>`\n\n"
-            "**Examples:**\n"
-            "• `/ignore\\_email noreply@example\\.com` \\- Ignore specific email\n"
-            "• `/ignore\\_email @spam\\.com` \\- Ignore entire domain\n"
-            "• `/ignore\\_email newsletter` \\- Ignore emails containing 'newsletter'\n\n"
-            "**Other Commands:**\n"
-            "• `/list\\_ignored` \\- View all ignored patterns\n"
-            "• `/settings` \\- View your current settings"
-        )
-
-        await update.message.reply_text(usage_message, parse_mode=ParseMode.MARKDOWN)
-        return
-
-    mask = args[0].strip()
-
-    user_service = get_user_service()
-    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
-    if not user:
-        await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
-        )
-        return
-
-    ignored = (
-        cast(
-            list[str] | None,
-            await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS),
-        )
-        or []
+    from the_assistant.integrations.telegram.enhanced_command_handlers import (
+        IgnoreEmailHandler,
     )
 
-    if mask in ignored:
-        await update.message.reply_text(
-            f"📧 Pattern `{mask}` is already in your ignore list\\.\n\n"
-            f"Use `/list\\_ignored` to see all ignored patterns\\."
-        )
-        return
-
-    ignored.append(mask)
-    await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS, ignored)
-
-    await update.message.reply_text(
-        f"✅ Added `{mask}` to your email ignore list\\.\n\n"
-        f"Emails matching this pattern will no longer trigger notifications\\.\n"
-        f"Use `/list\\_ignored` to see all ignored patterns\\."
-    )
+    handler = IgnoreEmailHandler()
+    await handler.handle_command(update, context)
 
 
 async def handle_list_ignored_command(
@@ -797,8 +759,10 @@ async def handle_list_ignored_command(
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -831,7 +795,12 @@ async def handle_list_ignored_command(
             "• `/settings` \\- View all settings"
         )
 
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
 
 
 async def handle_memory_add_command(
@@ -891,9 +860,11 @@ async def handle_memory_input_dialog(
             text
         )
         if not is_valid:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
                 f"❌ {validation_message}\n\nPlease try again:",
                 parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return ConversationState.MEMORY_INPUT  # Stay in dialog mode
 
@@ -901,8 +872,10 @@ async def handle_memory_input_dialog(
         user_service = get_user_service()
         user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
         if not user:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                "❌ You need to register first. Please use /start to register."
+                "❌ You need to register first. Please use /start to register.",
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return ConversationHandler.END
 
@@ -912,14 +885,24 @@ async def handle_memory_input_dialog(
 
         # Send confirmation
         confirmation = MessageFormatter.format_confirmation("Memory added", text)
-        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            confirmation,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
         # Clear conversation state
-        context.user_data.pop("conversation_state", None)
+        cast(dict[str, Any], context.user_data).pop("conversation_state", None)
         return ConversationHandler.END
 
     except ValueError as e:
-        await update.message.reply_text(f"❌ {str(e)}", parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            f"❌ {str(e)}",
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
         return ConversationHandler.END
     except Exception as e:
         await ErrorHandler.handle_command_error(update, e, "memory_add")
@@ -936,8 +919,10 @@ async def handle_memory_command(
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -950,8 +935,10 @@ async def handle_memory_command(
     )
 
     if not memories:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "No memories stored. Use /memory_add to add one."
+            "No memories stored. Use /memory_add to add one.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -962,7 +949,11 @@ async def handle_memory_command(
         # Use plain text instead of markdown for user content to avoid parsing issues
         message += f"{i}. {txt}\n"
     message += "\nUse /memory_delete <id> to delete a memory."
-    await update.message.reply_text(message)
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        message,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
 
 
 async def start_memory_delete(
@@ -989,8 +980,10 @@ async def start_memory_delete(
     )
 
     if not memories:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "No memories to delete. Use /memory_add to add one first."
+            "No memories to delete. Use /memory_add to add one first.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return ConversationHandler.END
 
@@ -999,14 +992,22 @@ async def start_memory_delete(
     if args and args[0].isdigit():
         mem_id = int(args[0])
         if mem_id < 1 or mem_id > len(memories):
-            await update.message.reply_text("Invalid memory id.")
+            keyboard_manager = PersistentKeyboardManager()
+            await update.message.reply_text(
+                "Invalid memory id.",
+                reply_markup=keyboard_manager.create_main_keyboard(),
+            )
             return ConversationHandler.END
 
         key = sorted(memories.keys())[mem_id - 1]
         memory_text = memories[key].get("user_input", "")
         del memories[key]
         await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
-        await update.message.reply_text(f"✅ Memory deleted: {memory_text}")
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            f"✅ Memory deleted: {memory_text}",
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
         return ConversationHandler.END
 
     # Show keyboard with memory options
@@ -1038,8 +1039,10 @@ async def select_memory_to_delete(
 
     choice = update.message.text.strip()
     if choice == "Cancel":
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "Memory deletion cancelled.", reply_markup=ReplyKeyboardRemove()
+            "Memory deletion cancelled.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return ConversationHandler.END
 
@@ -1055,9 +1058,10 @@ async def select_memory_to_delete(
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
             "❌ You need to register first. Please use /start to register.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return ConversationHandler.END
 
@@ -1070,8 +1074,10 @@ async def select_memory_to_delete(
     )
 
     if mem_id < 1 or mem_id > len(memories):
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "Invalid memory selection.", reply_markup=ReplyKeyboardRemove()
+            "Invalid memory selection.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return ConversationHandler.END
 
@@ -1080,8 +1086,10 @@ async def select_memory_to_delete(
     del memories[key]
     await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
 
+    keyboard_manager = PersistentKeyboardManager()
     await update.message.reply_text(
-        f"✅ Memory deleted: {memory_text}", reply_markup=ReplyKeyboardRemove()
+        f"✅ Memory deleted: {memory_text}",
+        reply_markup=keyboard_manager.create_main_keyboard(),
     )
     return ConversationHandler.END
 
@@ -1201,7 +1209,7 @@ async def handle_keyboard_button(
         update: The update object from Telegram
         context: The context object from Telegram
     """
-    if not update.message or not update.message.text:
+    if not update.message or update.message.text is None or not update.effective_user:
         return
 
     keyboard_manager = PersistentKeyboardManager()
@@ -1233,12 +1241,17 @@ async def handle_keyboard_button(
             await start_update_settings(update, context)
         else:
             logger.warning(f"Unknown keyboard command: {command}")
+            await update.message.reply_text(
+                f"❌ Sorry, the command '{command}' is not implemented yet.",
+                reply_markup=keyboard_manager.create_main_keyboard(),
+            )
+            return
 
     except Exception as e:
         logger.error(f"Error handling keyboard button command '{command}': {e}")
         keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            f"❌ Sorry, there was an error processing the {command} command. Please try again.",
+            "❌ Sorry, there was an error processing your request. Please try again.",
             reply_markup=keyboard_manager.create_main_keyboard(),
         )
 
@@ -1275,8 +1288,10 @@ async def handle_status_command(
     user_service = get_user_service()
     user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
     if not user:
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
+            "❌ You need to register first. Please use /start to register.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
         return
 
@@ -1310,7 +1325,12 @@ async def handle_status_command(
         f"Use `/help` to see all available commands\\."
     )
 
-    await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN)
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        status_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
 
 
 async def handle_track_habit_command(
@@ -1351,70 +1371,6 @@ async def handle_track_habit_command(
     )
 
 
-async def handle_keyboard_button(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Handle persistent keyboard button presses.
-
-    This handler intercepts keyboard button presses and routes them to the
-    corresponding command handlers, ensuring identical behavior between
-    buttons and typed commands.
-
-    Args:
-        update: The update object from Telegram
-        context: The context object from Telegram
-    """
-    if not update.message or not update.message.text or not update.effective_user:
-        return
-
-    # Initialize keyboard manager
-    keyboard_manager = PersistentKeyboardManager()
-
-    # Check if this is a keyboard button press
-    command = await keyboard_manager.handle_keyboard_button(update, context)
-
-    if not command:
-        # Not a keyboard button, let other handlers process it
-        return
-
-    logger.info(
-        f"Processing keyboard button '{update.message.text}' as command: /{command}"
-    )
-
-    # Route to the appropriate command handler based on the command
-    try:
-        if command == "briefing":
-            await handle_briefing_command(update, context)
-        elif command == "add_task":
-            # Clear args to trigger dialog mode for keyboard buttons
-            context.args = []
-            await handle_add_task_command(update, context)
-        elif command == "add_countdown":
-            # Clear args to trigger dialog mode for keyboard buttons
-            context.args = []
-            await handle_add_countdown_command(update, context)
-        elif command == "track_habit":
-            await handle_track_habit_command(update, context)
-        elif command == "memory":
-            await handle_memory_command(update, context)
-        elif command == "update_settings":
-            await start_update_settings(update, context)
-        else:
-            logger.warning(f"Unknown command from keyboard button: {command}")
-            await update.message.reply_text(
-                f"❌ Sorry, the command '{command}' is not implemented yet.",
-                parse_mode=ParseMode.HTML,
-            )
-    except Exception as e:
-        logger.error(
-            f"Error handling keyboard button command '{command}': {e}", exc_info=True
-        )
-        await update.message.reply_text(
-            "❌ Sorry, there was an error processing your request. Please try again.",
-            parse_mode=ParseMode.HTML,
-        )
-
-
 async def create_telegram_client() -> TelegramClient:
     """Create a TelegramClient instance using environment variables.
 
@@ -1440,6 +1396,7 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("help", handle_help_command)
     await client.register_command_handler("briefing", handle_briefing_command)
     await client.register_command_handler("settings", handle_settings_command)
+    await client.register_command_handler("update_settings", start_update_settings)
     await client.register_command_handler("google_auth", handle_google_auth_command)
     await client.register_command_handler("ignore_email", handle_ignore_email_command)
     await client.register_command_handler("list_ignored", handle_list_ignored_command)
@@ -1448,18 +1405,12 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("memories", handle_memory_command)
     await client.register_command_handler("add_countdown", handle_add_countdown_command)
     await client.register_command_handler("track_habit", handle_track_habit_command)
-    # Settings conversation handler
-    settings_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("update_settings", start_update_settings)],
-        states={
-            ConversationState.SELECT_SETTING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, select_setting)
-            ],
-            ConversationState.ENTER_VALUE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_setting)
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", cancel_update)],
+    # Inline settings handlers
+    settings_callback_handler = CallbackQueryHandler(
+        SettingsInterfaceManager().handle_setting_callback, pattern="^setting:"
+    )
+    setting_value_handler = MessageHandler(
+        filters.TEXT & ~filters.COMMAND, handle_setting_value_input
     )
 
     # Memory deletion conversation handler
@@ -1521,7 +1472,8 @@ async def create_telegram_client() -> TelegramClient:
         per_user=True,
     )
 
-    await client.register_handler(settings_conv_handler)
+    await client.register_handler(settings_callback_handler)
+    await client.register_handler(setting_value_handler)
     await client.register_handler(memory_delete_conv_handler)
     await client.register_handler(memory_input_conv_handler)
     await client.register_handler(task_input_conv_handler)

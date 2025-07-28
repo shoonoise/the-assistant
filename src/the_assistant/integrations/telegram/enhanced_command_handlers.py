@@ -19,6 +19,9 @@ from the_assistant.integrations.telegram.enhanced_handlers import (
     FlexibleCommandHandler,
     MessageFormatter,
 )
+from the_assistant.integrations.telegram.persistent_keyboard import (
+    PersistentKeyboardManager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +49,11 @@ class MemoryAddHandler(FlexibleCommandHandler):
             text
         )
         if not is_valid:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                f"❌ {validation_message}", parse_mode=ParseMode.HTML
+                f"❌ {validation_message}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -59,7 +65,12 @@ class MemoryAddHandler(FlexibleCommandHandler):
 
         # Send confirmation
         confirmation = MessageFormatter.format_confirmation("Memory added", text)
-        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            confirmation,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def handle_dialog_mode(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -81,7 +92,12 @@ class MemoryAddHandler(FlexibleCommandHandler):
             ],
         )
 
-        await update.message.reply_text(prompt, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            prompt,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def _store_memory(self, user: Any, text: str) -> None:
         """Store memory for the user.
@@ -136,8 +152,11 @@ class AddTaskHandler(FlexibleCommandHandler):
             raw_instruction
         )
         if not is_valid:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                f"❌ {validation_message}", parse_mode=ParseMode.HTML
+                f"❌ {validation_message}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -151,7 +170,12 @@ class AddTaskHandler(FlexibleCommandHandler):
         confirmation = MessageFormatter.format_confirmation(
             "Task added", raw_instruction
         )
-        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            confirmation,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def handle_dialog_mode(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -163,7 +187,7 @@ class AddTaskHandler(FlexibleCommandHandler):
             context: The context object from Telegram
         """
         # Set conversation state for dialog mode
-        context.user_data["conversation_state"] = "TASK_INPUT"
+        cast(dict[str, Any], context.user_data)["conversation_state"] = "TASK_INPUT"
 
         # Send helpful prompt with examples
         prompt = MessageFormatter.format_dialog_prompt(
@@ -176,7 +200,12 @@ class AddTaskHandler(FlexibleCommandHandler):
             ],
         )
 
-        await update.message.reply_text(prompt, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            prompt,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def _process_and_store_task(self, user: Any, raw_instruction: str) -> None:
         """Process and store task for the user.
@@ -224,8 +253,11 @@ class AddCountdownHandler(FlexibleCommandHandler):
             raw_text
         )
         if not is_valid:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                f"❌ {validation_message}", parse_mode=ParseMode.HTML
+                f"❌ {validation_message}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -237,7 +269,12 @@ class AddCountdownHandler(FlexibleCommandHandler):
 
         # Send confirmation
         confirmation = MessageFormatter.format_confirmation("Countdown added", raw_text)
-        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            confirmation,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def handle_dialog_mode(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -249,7 +286,9 @@ class AddCountdownHandler(FlexibleCommandHandler):
             context: The context object from Telegram
         """
         # Set conversation state for dialog mode
-        context.user_data["conversation_state"] = "COUNTDOWN_INPUT"
+        cast(dict[str, Any], context.user_data)["conversation_state"] = (
+            "COUNTDOWN_INPUT"
+        )
 
         # Send descriptive prompt with examples
         prompt = MessageFormatter.format_dialog_prompt(
@@ -262,7 +301,12 @@ class AddCountdownHandler(FlexibleCommandHandler):
             ],
         )
 
-        await update.message.reply_text(prompt, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            prompt,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def _process_and_store_countdown(self, user: Any, raw_text: str) -> None:
         """Process and store countdown for the user.
@@ -308,8 +352,11 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
             pattern
         )
         if not is_valid:
+            keyboard_manager = PersistentKeyboardManager()
             await update.message.reply_text(
-                f"❌ {validation_message}", parse_mode=ParseMode.HTML
+                f"❌ {validation_message}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -320,8 +367,17 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
         await self._store_email_pattern(user, pattern)
 
         # Send confirmation
-        confirmation = f"✅ Added <code>{pattern}</code> to your email ignore list.\n\nEmails matching this pattern will no longer trigger notifications.\nUse /list_ignored to see all ignored patterns."
-        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+        confirmation = (
+            f"✅ Added <code>{pattern}</code> to your email ignore list.\n\n"
+            "Emails matching this pattern will no longer trigger notifications.\n"
+            "Use /list_ignored to see all ignored patterns."
+        )
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            confirmation,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def handle_dialog_mode(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -345,7 +401,12 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
             "• <code>/settings</code> - View your current settings"
         )
 
-        await update.message.reply_text(usage_message, parse_mode=ParseMode.HTML)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            usage_message,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
     async def _store_email_pattern(self, user: Any, pattern: str) -> None:
         """Store email ignore pattern for the user.

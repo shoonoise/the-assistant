@@ -1,14 +1,14 @@
 """Tests for the persistent keyboard management system."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from telegram import ReplyKeyboardMarkup, Update, Message
+import pytest
+from telegram import Message, ReplyKeyboardMarkup, Update
 from telegram.constants import ParseMode
 
 from the_assistant.integrations.telegram.persistent_keyboard import (
-    PersistentKeyboardManager,
     KEYBOARD_COMMAND_MAP,
+    PersistentKeyboardManager,
 )
 
 

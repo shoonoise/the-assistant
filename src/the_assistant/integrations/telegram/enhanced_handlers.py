@@ -13,7 +13,10 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from the_assistant.db import get_user_service
+from the_assistant.integrations.telegram.persistent_keyboard import (
+    PersistentKeyboardManager,
+)
+from the_assistant.integrations.telegram.telegram_client import get_user_service
 
 logger = logging.getLogger(__name__)
 
@@ -212,10 +215,13 @@ class ErrorHandler:
         logger.error(f"Error in /{command} command: {error}", exc_info=True)
 
         # Determine error message based on error type
-        if isinstance(error, ValueError) and "not registered" in str(error):
-            error_message = (
-                "❌ You need to register first. Please use /start to register."
-            )
+        if isinstance(error, ValueError):
+            if "not registered" in str(error):
+                error_message = (
+                    "❌ You need to register first. Please use /start to register."
+                )
+            else:
+                error_message = f"❌ {error}"
         else:
             error_message = (
                 f"❌ Sorry, there was an error processing the /{command} command.\n\n"
@@ -223,7 +229,12 @@ class ErrorHandler:
             )
 
         try:
-            await update.message.reply_text(error_message, parse_mode=ParseMode.HTML)
+            keyboard_manager = PersistentKeyboardManager()
+            await update.message.reply_text(
+                error_message,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
+            )
         except Exception as send_error:
             logger.error(f"Failed to send error message: {send_error}")
 
@@ -243,7 +254,12 @@ class ErrorHandler:
         )
 
         try:
-            await update.message.reply_text(error_message, parse_mode=ParseMode.HTML)
+            keyboard_manager = PersistentKeyboardManager()
+            await update.message.reply_text(
+                error_message,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard_manager.create_main_keyboard(),
+            )
         except Exception as send_error:
             logger.error(f"Failed to send validation error message: {send_error}")
 

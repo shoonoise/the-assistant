@@ -1,22 +1,22 @@
 """Tests for enhanced command handler infrastructure."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from telegram import Update, User, Message, Chat
+import pytest
+from telegram import Chat, Message, Update, User
 from telegram.ext import ContextTypes
 
+from the_assistant.integrations.telegram.enhanced_command_handlers import (
+    AddCountdownHandler,
+    AddTaskHandler,
+    IgnoreEmailHandler,
+    MemoryAddHandler,
+)
 from the_assistant.integrations.telegram.enhanced_handlers import (
-    FlexibleCommandHandler,
     CommandValidator,
     ErrorHandler,
+    FlexibleCommandHandler,
     MessageFormatter,
-)
-from the_assistant.integrations.telegram.enhanced_command_handlers import (
-    MemoryAddHandler,
-    AddTaskHandler,
-    AddCountdownHandler,
-    IgnoreEmailHandler,
 )
 
 
@@ -209,7 +209,6 @@ class TestErrorHandler:
     def mock_update(self):
         """Create a mock update object."""
         user = User(id=123, is_bot=False, first_name="Test")
-        chat = Chat(id=456, type="private")
         message = MagicMock(spec=Message)
         message.reply_text = AsyncMock()
 
@@ -319,7 +318,6 @@ class TestMemoryAddHandler:
     def mock_update(self):
         """Create a mock update object."""
         user = User(id=123, is_bot=False, first_name="Test")
-        chat = Chat(id=456, type="private")
         message = MagicMock(spec=Message)
         message.reply_text = AsyncMock()
 

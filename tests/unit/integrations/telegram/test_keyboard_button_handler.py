@@ -1,12 +1,12 @@
 """Tests for keyboard button handler functionality."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from telegram import Update, Message, User, Chat
+import pytest
+from telegram import Message, Update, User
 from telegram.ext import ContextTypes
 
-from src.the_assistant.integrations.telegram.telegram_client import (
+from the_assistant.integrations.telegram.telegram_client import (
     handle_keyboard_button,
 )
 
@@ -36,7 +36,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "📊 Briefing"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             mock_briefing.return_value = None
 
@@ -50,7 +50,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "📅 Schedule Task"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_add_task_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_add_task_command"
         ) as mock_add_task:
             mock_add_task.return_value = None
 
@@ -68,7 +68,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "⏰ Add Countdown"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_add_countdown_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_add_countdown_command"
         ) as mock_add_countdown:
             mock_add_countdown.return_value = None
 
@@ -84,7 +84,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "📈 Track Habit"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_track_habit_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_track_habit_command"
         ) as mock_track_habit:
             mock_track_habit.return_value = None
 
@@ -98,7 +98,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "🧠 Memories"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_memory_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_memory_command"
         ) as mock_memory:
             mock_memory.return_value = None
 
@@ -112,7 +112,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "⚙️ Settings"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.start_update_settings"
+            "the_assistant.integrations.telegram.telegram_client.start_update_settings"
         ) as mock_settings:
             mock_settings.return_value = None
 
@@ -128,7 +128,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "regular text message"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             await handle_keyboard_button(mock_update, mock_context)
 
@@ -142,7 +142,7 @@ class TestKeyboardButtonHandler:
         update.message = None
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             await handle_keyboard_button(update, mock_context)
 
@@ -155,7 +155,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = None
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             await handle_keyboard_button(mock_update, mock_context)
 
@@ -171,7 +171,7 @@ class TestKeyboardButtonHandler:
         mock_update.effective_user = None
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             await handle_keyboard_button(mock_update, mock_context)
 
@@ -188,7 +188,7 @@ class TestKeyboardButtonHandler:
 
         # Mock the keyboard manager to return an unknown command
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.PersistentKeyboardManager"
+            "the_assistant.integrations.telegram.telegram_client.PersistentKeyboardManager"
         ) as mock_keyboard_manager:
             mock_manager = mock_keyboard_manager.return_value
             mock_manager.handle_keyboard_button = AsyncMock(
@@ -211,7 +211,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.reply_text = AsyncMock()
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             mock_briefing.side_effect = Exception("Test error")
 
@@ -234,7 +234,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "📅 Schedule Task"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_add_task_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_add_task_command"
         ) as mock_add_task:
             mock_add_task.return_value = None
 
@@ -256,7 +256,7 @@ class TestKeyboardButtonHandler:
         mock_update.message.text = "📊 Briefing"
 
         with patch(
-            "src.the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
+            "the_assistant.integrations.telegram.telegram_client.handle_briefing_command"
         ) as mock_briefing:
             mock_briefing.return_value = None
 

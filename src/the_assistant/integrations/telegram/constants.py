@@ -34,6 +34,11 @@ SETTINGS_LABEL_MAP: dict[str, SettingKey] = {
     "Ignored email senders": SettingKey.IGNORE_EMAILS,
 }
 
+# Reverse lookup map for displaying setting labels
+SETTINGS_LABEL_LOOKUP: dict[SettingKey, str] = {
+    v: k for k, v in SETTINGS_LABEL_MAP.items()
+}
+
 
 # Keyboard button to command mapping dictionary
 KEYBOARD_COMMAND_MAP: dict[str, str] = {
