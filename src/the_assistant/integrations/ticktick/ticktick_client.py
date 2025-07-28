@@ -46,7 +46,7 @@ class TickTickClient:
 
     async def _refresh_token(self, token: TickToken) -> TickToken:
         if not token.refresh_token:
-            return token
+            raise ValueError("Cannot refresh expired token: no refresh_token available.")
         data = {
             "grant_type": "refresh_token",
             "refresh_token": token.refresh_token,
