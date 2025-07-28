@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import date, timedelta
+from typing import Any
 
-from ticktick import TickTick
+import httpx
 
+from the_assistant.db import get_user_service
+from the_assistant.integrations.ticktick.token_store import TickTickTokenStore
 from the_assistant.models.ticktick import TickTask
 from the_assistant.settings import get_settings
 
@@ -13,47 +15,51 @@ logger = logging.getLogger(__name__)
 
 
 class TickTickClient:
-    """Simple asynchronous wrapper around the ``ticktick`` library."""
+    """Minimal client for the TickTick Open API."""
 
-    def __init__(self):
+    BASE_URL = "https://api.ticktick.com/open/v1"
+
+    def __init__(self, user_id: int, account: str | None = None) -> None:
+        self.user_id = user_id
+        self.account = account or "default"
         settings = get_settings()
-        if not settings.ticktick_username or not settings.ticktick_password:
-            raise ValueError("TickTick credentials are not configured")
-        self.username = settings.ticktick_username
-        self.password = settings.ticktick_password
-        self._client: TickTick | None = None
+        self._token_store = TickTickTokenStore(
+            encryption_key=settings.db_encryption_key,
+            account=self.account,
+            user_service=get_user_service(),
+        )
+        self._fallback_token = settings.ticktick_access_token
 
-    def _create_client(self) -> None:
-        logger.info("Logging in to TickTick as %s", self.username)
-        self._client = TickTick(self.username, self.password)
+    async def _get_token(self) -> str:
+        token = await self._token_store.get(self.user_id)
+        if token:
+            return token
+        if self._fallback_token:
+            return self._fallback_token
+        raise ValueError("TickTick access token not configured")
 
-    async def ensure_client(self) -> TickTick:
-        if self._client is None:
-            await asyncio.to_thread(self._create_client)
-        return self._client  # type: ignore[return-value]
-
-    async def _fetch_tasks(self) -> list[TickTask]:
-        client = await self.ensure_client()
-        await asyncio.to_thread(client.fetch)
-        return [TickTask.from_ticktask(t) for t in getattr(client, "tasks", [])]
+    async def _request(self, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        token = await self._get_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.BASE_URL}{path}", params=params, headers=headers
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     async def get_tasks_for_date(self, day: date) -> list[TickTask]:
-        tasks = await self._fetch_tasks()
-        return [
-            t
-            for t in tasks
-            if (t.due_date or t.start_date)
-            and (t.due_date or t.start_date).date() == day
-            and not t.completed
-        ]
+        payload = await self._request(
+            "/task",
+            {"startDate": day.isoformat(), "endDate": day.isoformat()},
+        )
+        return [TickTask.from_ticktask(item) for item in payload]
 
     async def get_tasks_ahead(self, days: int = 7) -> list[TickTask]:
         start = date.today()
         end = start + timedelta(days=days - 1)
-        tasks = await self._fetch_tasks()
-        result = []
-        for t in tasks:
-            d = t.due_date or t.start_date
-            if d and start <= d.date() <= end and not t.completed:
-                result.append(t)
-        return result
+        payload = await self._request(
+            "/task",
+            {"startDate": start.isoformat(), "endDate": end.isoformat()},
+        )
+        return [TickTask.from_ticktask(item) for item in payload]

@@ -112,6 +112,22 @@ class UserService:
         account_name = account or "default"
         return await self._get_third_party_credentials(user_id, "google", account_name)
 
+    async def set_ticktick_token(
+        self, user_id: int, token_enc: str | None, account: str | None = None
+    ) -> None:
+        account_name = account or "default"
+        await self._set_third_party_credentials(
+            user_id, "ticktick", token_enc, account_name
+        )
+
+    async def get_ticktick_token(
+        self, user_id: int, account: str | None = None
+    ) -> str | None:
+        account_name = account or "default"
+        return await self._get_third_party_credentials(
+            user_id, "ticktick", account_name
+        )
+
     async def update_user(self, user_id: int, **data: Any) -> User | None:
         """Update a user's fields and return the updated record."""
         async with self._session_maker() as session:

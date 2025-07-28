@@ -23,11 +23,11 @@ class GetUpcomingTasksInput:
 
 @activity.defn
 async def get_tasks_for_date(input: GetTasksForDateInput) -> list[TickTask]:
-    client = TickTickClient()
+    client = TickTickClient(user_id=input.user_id)
     return await client.get_tasks_for_date(input.day)
 
 
 @activity.defn
 async def get_tasks_next_days(input: GetUpcomingTasksInput) -> list[TickTask]:
-    client = TickTickClient()
+    client = TickTickClient(user_id=input.user_id)
     return await client.get_tasks_ahead(input.days)

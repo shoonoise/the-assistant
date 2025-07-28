@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -6,40 +6,17 @@ import pytest
 from the_assistant.integrations.ticktick.ticktick_client import TickTickClient
 
 
-class DummyList:
-    def __init__(self, name: str):
-        self.name = name
-
-
-class DummyTask:
-    def __init__(self, id: str, title: str, due: datetime | None, status: int = 0):
-        self.id = id
-        self.title = title
-        self.dueDate = due
-        self.startDate = None
-        self.status = status
-        self.list = DummyList("Inbox")
-        self.tags = []
-
-    @property
-    def is_completed(self) -> bool:
-        return self.status > 0
-
-
-class DummyTickTick:
-    def __init__(self, *args, **kwargs):
-        self.tasks = []
-
-    def fetch(self):
+class DummyStore:
+    def __init__(self, *args, **kwargs) -> None:
         pass
+
+    async def get(self, user_id: int) -> str | None:  # noqa: D401 - simple return
+        return "token"
 
 
 @pytest.fixture
 def mock_settings(monkeypatch):
-    settings = SimpleNamespace(
-        ticktick_username="user",
-        ticktick_password="pass",
-    )
+    settings = SimpleNamespace(db_encryption_key="key", ticktick_access_token=None)
     monkeypatch.setattr(
         "the_assistant.integrations.ticktick.ticktick_client.get_settings",
         lambda: settings,
@@ -48,52 +25,70 @@ def mock_settings(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_missing_credentials(monkeypatch):
-    monkeypatch.setattr(
-        "the_assistant.integrations.ticktick.ticktick_client.get_settings",
-        lambda: SimpleNamespace(ticktick_username=None, ticktick_password=None),
-    )
-    with pytest.raises(ValueError):
-        TickTickClient()
-
-
-@pytest.mark.asyncio
 async def test_get_tasks_for_date(monkeypatch, mock_settings):
-    dummy = DummyTickTick()
-    today = date.today()
-    tomorrow = today + timedelta(days=1)
-    dummy.tasks = [
-        DummyTask("1", "A", datetime.combine(today, datetime.min.time()), 0),
-        DummyTask("2", "B", datetime.combine(tomorrow, datetime.min.time()), 0),
-    ]
+    async def fake_request(self, path, params):  # noqa: D401 - simple return
+        return [
+            {
+                "id": "1",
+                "title": "A",
+                "dueDate": params["startDate"] + "T00:00:00Z",
+                "status": 0,
+                "list": {"name": "Inbox"},
+                "tags": [],
+            }
+        ]
+
     monkeypatch.setattr(
-        "the_assistant.integrations.ticktick.ticktick_client.TickTick",
-        lambda u, p: dummy,
+        "the_assistant.integrations.ticktick.ticktick_client.TickTickTokenStore",
+        DummyStore,
+    )
+    monkeypatch.setattr(
+        "the_assistant.integrations.ticktick.ticktick_client.get_user_service",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "the_assistant.integrations.ticktick.ticktick_client.TickTickClient._request",
+        fake_request,
     )
 
-    client = TickTickClient()
-    tasks = await client.get_tasks_for_date(today)
+    client = TickTickClient(user_id=1)
+    tasks = await client.get_tasks_for_date(date.today())
     assert len(tasks) == 1
     assert tasks[0].title == "A"
 
 
 @pytest.mark.asyncio
 async def test_get_tasks_ahead(monkeypatch, mock_settings):
-    dummy = DummyTickTick()
-    start = date.today()
-    dummy.tasks = [
-        DummyTask(
-            "1",
-            "A",
-            datetime.combine(start + timedelta(days=i), datetime.min.time()),
-            0,
-        )
-        for i in range(3)
-    ]
+    async def fake_request(self, path, params):  # noqa: D401 - simple return
+        start = date.fromisoformat(params["startDate"])
+        end = date.fromisoformat(params["endDate"])
+        payload = []
+        current = start
+        while current <= end:
+            payload.append(
+                {
+                    "id": current.isoformat(),
+                    "title": current.isoformat(),
+                    "dueDate": current.isoformat() + "T00:00:00Z",
+                    "status": 0,
+                }
+            )
+            current += timedelta(days=1)
+        return payload
+
     monkeypatch.setattr(
-        "the_assistant.integrations.ticktick.ticktick_client.TickTick",
-        lambda u, p: dummy,
+        "the_assistant.integrations.ticktick.ticktick_client.TickTickTokenStore",
+        DummyStore,
     )
-    client = TickTickClient()
+    monkeypatch.setattr(
+        "the_assistant.integrations.ticktick.ticktick_client.get_user_service",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "the_assistant.integrations.ticktick.ticktick_client.TickTickClient._request",
+        fake_request,
+    )
+
+    client = TickTickClient(user_id=1)
     tasks = await client.get_tasks_ahead(2)
     assert len(tasks) == 2

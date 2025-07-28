@@ -18,12 +18,23 @@ class TickTask(BaseAssistantModel):
 
     @classmethod
     def from_ticktask(cls, task: object) -> "TickTask":
+        if isinstance(task, dict):
+            get = task.get
+            list_obj = task.get("list") or {}
+        else:
+
+            def get(k: str, d=None):
+                return getattr(task, k, d)
+
+            list_obj = getattr(task, "list", None) or {}
         return cls(
-            id=getattr(task, "id", ""),
-            title=getattr(task, "title", ""),
-            due_date=getattr(task, "dueDate", None),
-            start_date=getattr(task, "startDate", None),
-            completed=getattr(task, "is_completed", False),
-            project=getattr(getattr(task, "list", None), "name", None),
-            tags=list(getattr(task, "tags", [])) if getattr(task, "tags", None) else [],
+            id=get("id", ""),
+            title=get("title", ""),
+            due_date=get("dueDate"),
+            start_date=get("startDate"),
+            completed=get("is_completed", False) or get("status", 0) > 0,
+            project=getattr(list_obj, "name", None)
+            if not isinstance(list_obj, dict)
+            else list_obj.get("name"),
+            tags=list(get("tags", [])),
         )

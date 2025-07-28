@@ -63,8 +63,7 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = Field(None, env="TAVILY_API_KEY")
 
     # TickTick
-    ticktick_username: str | None = Field(None, env="TICKTICK_USERNAME")
-    ticktick_password: str | None = Field(None, env="TICKTICK_PASSWORD")
+    ticktick_access_token: str | None = Field(None, env="TICKTICK_ACCESS_TOKEN")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
