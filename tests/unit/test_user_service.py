@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -135,3 +137,19 @@ async def test_task_creation_and_listing(user_service):
     tasks = await user_service.list_tasks(user.id)
     assert len(tasks) == 1
     assert tasks[0].raw_instruction == "every day at 6pm say hi"
+
+
+@pytest.mark.asyncio
+async def test_countdown_creation_and_listing(user_service):
+    user = await user_service.create_user(username="countuser")
+
+    cd = await user_service.create_countdown(
+        user.id,
+        description="party",
+        event_time=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    assert cd.id is not None
+
+    countdowns = await user_service.list_countdowns(user.id)
+    assert len(countdowns) == 1
+    assert countdowns[0].description == "party"
