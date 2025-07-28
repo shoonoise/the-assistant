@@ -21,7 +21,7 @@ class TickTask(BaseAssistantModel):
     priority: int | None = Field(default=None, description="Priority level")
 
     @classmethod
-    def from_ticktask(cls, task: dict[str, object]) -> "TickTask":
+    def from_ticktask(cls, task: dict[str, Any]) -> "TickTask":
         """Create a TickTask from raw API data."""
         status = int(task.get("status", 0))
         list_info = task.get("list")
