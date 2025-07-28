@@ -49,7 +49,7 @@ async def begin_ticktick_auth(
         state = create_state_jwt(user_id, settings, account=account)
         auth_url = await client.generate_auth_url(state)
         return {"auth_url": auth_url, "authenticated": False}
-    except Exception as e:
+    except (ValueError, HTTPError) as e:
         logger.error(f"Failed to start auth flow: {e}")
         raise HTTPException(status_code=500, detail="Failed to start auth flow") from e
 
