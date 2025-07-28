@@ -35,6 +35,8 @@ from the_assistant.integrations.google.oauth_state import create_state_jwt
 from the_assistant.settings import get_settings
 
 from .constants import SETTINGS_LABEL_MAP, ConversationState, SettingKey
+from .enhanced_handlers import MessageFormatter
+from .persistent_keyboard import PersistentKeyboardManager
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ COMMAND_REGISTRY: dict[str, str] = {
     "memory_delete": "Delete a memory by its id",
     "add_task": "Create a new scheduled task",
     "add_countdown": "Add a countdown event",
+    "track_habit": "Track daily habits and routines (coming soon)",
 }
 
 
@@ -269,6 +272,15 @@ class TelegramClient:
             self.application.add_handler(handler)
             logger.info("Added additional handler")
 
+        # Add keyboard button handler (must be before unknown command handler)
+        self.application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & ~filters.UpdateType.EDITED_MESSAGE,
+                handle_keyboard_button,
+            )
+        )
+        logger.info("Added handler for keyboard buttons")
+
         # Add handler for unknown commands (must be last to catch unhandled commands)
         self.application.add_handler(
             MessageHandler(
@@ -355,10 +367,17 @@ async def handle_start_command(
         "• Provide morning briefings with your schedule and tasks\n"
         "• Respond to your commands for on-demand information\n\n"
         f"✅ You've been registered with ID: `{user.id}`\n\n"
-        "Use /help to see all available commands or /settings to manage your preferences."
+        "Use /help to see all available commands or /settings to manage your preferences.\n\n"
+        "💡 Use the keyboard buttons below for quick access to main features!"
     )
 
-    await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)
+    # Initialize keyboard manager and send message with persistent keyboard
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        welcome_message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
     logger.info(f"Registered and sent welcome message to user {user.id}")
 
 
@@ -377,27 +396,29 @@ async def handle_help_command(
         logger.warning("Received help command without message or effective_user")
         return
 
-    # Build help message from command registry
-    help_message = "📚 **Available Commands**\n\n"
+    # Use MessageFormatter to create properly formatted help message
+    help_message = MessageFormatter.format_help_message(COMMAND_REGISTRY)
 
-    # Add each command with its description
-    for command, description in COMMAND_REGISTRY.items():
-        help_message += f"/{command} - {description}\n"
-
+    # Add additional information about automatic features
     help_message += (
-        "\n**Automatic Features:**\n"
+        "\n\n<b>🤖 Automatic Features:</b>\n"
         "• Morning briefings with your daily schedule\n"
         "• Reminders about upcoming trips\n"
         "• Important task deadlines\n"
         "• Smart email filtering and notifications\n\n"
-        "**Tips:**\n"
+        "<b>ℹ️ Additional Info:</b>\n"
         "• Use the command menu (/) to see all available commands\n"
-        "• Commands support autocompletion in most Telegram clients\n"
-        "• Use /settings to customize your experience\n\n"
+        "• Commands support autocompletion in most Telegram clients\n\n"
         "If you have any issues or questions, please contact your system administrator."
     )
 
-    await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
+    # Send help message with persistent keyboard
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        help_message,
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
     logger.info(f"Sent comprehensive help message to user {update.effective_user.id}")
 
 
@@ -470,16 +491,21 @@ async def handle_briefing_command(
 
         logger.info(f"Workflow started with ID: {handle.id} for user {user.id}")
 
-        # Send confirmation that the workflow was started
+        # Send confirmation that the workflow was started with persistent keyboard
+        keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
-            "✅ Your briefing is being generated and will be delivered shortly!"
+            "✅ Your briefing is being generated and will be delivered shortly!",
+            reply_markup=keyboard_manager.create_main_keyboard(),
         )
 
         logger.info(f"Successfully started briefing workflow for user {user.id}")
 
     except Exception as e:
         error_message = "❌ Sorry, I encountered an error while generating your briefing. Please try again later."
-        await update.message.reply_text(error_message)
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            error_message, reply_markup=keyboard_manager.create_main_keyboard()
+        )
         logger.error(
             f"Error generating briefing for telegram user {telegram_user_id}: {e}"
         )
@@ -810,48 +836,94 @@ async def handle_list_ignored_command(
 
 async def handle_memory_add_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Add a short personal memory for the user."""
-    if not update.message or not update.effective_user:
-        return
-
-    text = " ".join(getattr(context, "args", [])).strip()
-    if not text:
-        await update.message.reply_text("Usage: /memory_add <text>")
-        return
-    if len(text) > 500:
-        await update.message.reply_text("Memory is too long (max 500 characters).")
-        return
-
-    user_service = get_user_service()
-    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
-    if not user:
-        await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
-        )
-        return
-
-    memories = (
-        cast(
-            dict[str, dict[str, str]] | None,
-            await user_service.get_setting(user.id, SettingKey.MEMORIES),
-        )
-        or {}
+) -> int:
+    """Add a short personal memory for the user with dual-mode support."""
+    from the_assistant.integrations.telegram.enhanced_command_handlers import (
+        MemoryAddHandler,
     )
 
-    if len(memories) >= 10:
-        await update.message.reply_text(
-            "You have reached the 10 memories limit. Delete one with /memory_delete <id>."
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    try:
+        # Get command arguments
+        args = getattr(context, "args", [])
+
+        handler = MemoryAddHandler()
+
+        if args:
+            # Direct mode: process command with provided arguments
+            await handler.handle_direct_mode(update, context, args)
+            return ConversationHandler.END
+        else:
+            # Dialog mode: start interactive dialog for argument collection
+            await handler.handle_dialog_mode(update, context)
+            return ConversationState.MEMORY_INPUT
+
+    except Exception as e:
+        from the_assistant.integrations.telegram.enhanced_handlers import ErrorHandler
+
+        await ErrorHandler.handle_command_error(update, e, "memory_add")
+        return ConversationHandler.END
+
+
+async def handle_memory_input_dialog(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle memory input in dialog mode."""
+    from the_assistant.integrations.telegram.enhanced_command_handlers import (
+        MemoryAddHandler,
+    )
+    from the_assistant.integrations.telegram.enhanced_handlers import (
+        CommandValidator,
+        ErrorHandler,
+        MessageFormatter,
+    )
+
+    if not update.message or not update.effective_user or not update.message.text:
+        return ConversationHandler.END
+
+    text = update.message.text.strip()
+
+    try:
+        # Validate input
+        is_valid, validation_message = await CommandValidator.validate_memory_input(
+            text
         )
-        return
+        if not is_valid:
+            await update.message.reply_text(
+                f"❌ {validation_message}\n\nPlease try again:",
+                parse_mode=ParseMode.HTML,
+            )
+            return ConversationState.MEMORY_INPUT  # Stay in dialog mode
 
-    key = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-    while key in memories:
-        key = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
-    memories[key] = {"user_input": text}
-    await user_service.set_setting(user.id, SettingKey.MEMORIES, memories)
+        # Get user
+        user_service = get_user_service()
+        user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+        if not user:
+            await update.message.reply_text(
+                "❌ You need to register first. Please use /start to register."
+            )
+            return ConversationHandler.END
 
-    await update.message.reply_text("✅ Memory added.")
+        # Store memory using the handler's method
+        handler = MemoryAddHandler()
+        await handler._store_memory(user, text)
+
+        # Send confirmation
+        confirmation = MessageFormatter.format_confirmation("Memory added", text)
+        await update.message.reply_text(confirmation, parse_mode=ParseMode.HTML)
+
+        # Clear conversation state
+        context.user_data.pop("conversation_state", None)
+        return ConversationHandler.END
+
+    except ValueError as e:
+        await update.message.reply_text(f"❌ {str(e)}", parse_mode=ParseMode.HTML)
+        return ConversationHandler.END
+    except Exception as e:
+        await ErrorHandler.handle_command_error(update, e, "memory_add")
+        return ConversationHandler.END
 
 
 async def handle_memory_command(
@@ -1024,76 +1096,170 @@ async def handle_memory_delete_command(
 
 async def handle_add_task_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Create a scheduled task from user instruction."""
-    if not update.message or not update.effective_user:
-        return
-
-    raw_instruction = " ".join(getattr(context, "args", [])).strip()
-    if not raw_instruction:
-        await update.message.reply_text("Usage: /add_task <instruction>")
-        return
-
-    user_service = get_user_service()
-    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
-    if not user:
-        await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
-        )
-        return
-
-    from the_assistant.integrations.llm import TaskParser
-
-    parser = TaskParser()
-    schedule, instruction = await parser.parse(raw_instruction)
-    if not schedule:
-        await update.message.reply_text(
-            "❌ Could not parse a schedule. Try something like 'every day at 6pm say hi'."
-        )
-        return
-
-    await user_service.create_task(
-        user.id, raw_instruction, schedule=schedule, instruction=instruction
+) -> int | None:
+    """Create a scheduled task from user instruction with dual-mode support."""
+    from the_assistant.integrations.telegram.enhanced_command_handlers import (
+        AddTaskHandler,
     )
 
-    await update.message.reply_text("✅ Task added.")
+    handler = AddTaskHandler()
+    await handler.handle_command(update, context)
+
+    # Return conversation state if dialog mode was triggered
+    args = getattr(context, "args", [])
+    if not args:
+        return ConversationState.TASK_INPUT
+
+    return None
+
+
+async def handle_task_input_dialog(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle task input in dialog mode."""
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    raw_instruction = update.message.text.strip()
+
+    try:
+        from the_assistant.integrations.telegram.enhanced_command_handlers import (
+            AddTaskHandler,
+        )
+
+        # Create a mock context with args for direct mode processing
+        mock_context = context
+        mock_context.args = raw_instruction.split()
+
+        handler = AddTaskHandler()
+        await handler.handle_direct_mode(update, mock_context, raw_instruction.split())
+
+        # Send message with persistent keyboard
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            "✅ Task processing completed!",
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing task in dialog mode: {e}")
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            f"❌ Error: {str(e)}", reply_markup=keyboard_manager.create_main_keyboard()
+        )
+
+    return ConversationHandler.END
+
+
+async def handle_countdown_input_dialog(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Handle countdown input in dialog mode."""
+    if not update.message or not update.effective_user:
+        return ConversationHandler.END
+
+    raw_description = update.message.text.strip()
+
+    try:
+        from the_assistant.integrations.telegram.enhanced_command_handlers import (
+            AddCountdownHandler,
+        )
+
+        # Create a mock context with args for direct mode processing
+        mock_context = context
+        mock_context.args = raw_description.split()
+
+        handler = AddCountdownHandler()
+        await handler.handle_direct_mode(update, mock_context, raw_description.split())
+
+        # Send message with persistent keyboard
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            "✅ Countdown processing completed!",
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing countdown in dialog mode: {e}")
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            f"❌ Error: {str(e)}", reply_markup=keyboard_manager.create_main_keyboard()
+        )
+
+    return ConversationHandler.END
+
+
+async def handle_keyboard_button(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle persistent keyboard button presses.
+
+    This function maps keyboard button presses to their corresponding commands
+    and executes them with the same behavior as typing the command.
+
+    Args:
+        update: The update object from Telegram
+        context: The context object from Telegram
+    """
+    if not update.message or not update.message.text:
+        return
+
+    keyboard_manager = PersistentKeyboardManager()
+    command = await keyboard_manager.handle_keyboard_button(update, context)
+
+    if not command:
+        # Not a keyboard button, ignore
+        return
+
+    logger.info(f"Processing keyboard button command: {command}")
+
+    try:
+        # Map keyboard button to corresponding command handler
+        if command == "briefing":
+            await handle_briefing_command(update, context)
+        elif command == "add_task":
+            # Clear args to trigger dialog mode for keyboard buttons
+            context.args = []
+            await handle_add_task_command(update, context)
+        elif command == "add_countdown":
+            # Clear args to trigger dialog mode for keyboard buttons
+            context.args = []
+            await handle_add_countdown_command(update, context)
+        elif command == "track_habit":
+            await handle_track_habit_command(update, context)
+        elif command == "memory":
+            await handle_memory_command(update, context)
+        elif command == "update_settings":
+            await start_update_settings(update, context)
+        else:
+            logger.warning(f"Unknown keyboard command: {command}")
+
+    except Exception as e:
+        logger.error(f"Error handling keyboard button command '{command}': {e}")
+        keyboard_manager = PersistentKeyboardManager()
+        await update.message.reply_text(
+            f"❌ Sorry, there was an error processing the {command} command. Please try again.",
+            reply_markup=keyboard_manager.create_main_keyboard(),
+        )
 
 
 async def handle_add_countdown_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Create a countdown event from user description."""
-    if not update.message or not update.effective_user:
-        return
-
-    raw_text = " ".join(getattr(context, "args", [])).strip()
-    if not raw_text:
-        await update.message.reply_text("Usage: /add_countdown <description>")
-        return
-
-    user_service = get_user_service()
-    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
-    if not user:
-        await update.message.reply_text(
-            "❌ You need to register first. Please use /start to register."
-        )
-        return
-
-    from the_assistant.integrations.llm import CountdownParser
-
-    parser = CountdownParser()
-    event_time, description = await parser.parse(raw_text)
-    if event_time is None:
-        await update.message.reply_text(
-            "❌ Could not parse a date. Try 'my birthday on 2025-05-01'."
-        )
-        return
-
-    await user_service.create_countdown(
-        user.id, description=description, event_time=event_time
+) -> int | None:
+    """Create a countdown event from user description with dual-mode support."""
+    from the_assistant.integrations.telegram.enhanced_command_handlers import (
+        AddCountdownHandler,
     )
 
-    await update.message.reply_text("✅ Countdown added.")
+    handler = AddCountdownHandler()
+    await handler.handle_command(update, context)
+
+    # Return conversation state if dialog mode was triggered
+    args = getattr(context, "args", [])
+    if not args:
+        return ConversationState.COUNTDOWN_INPUT
+
+    return None
 
 
 async def handle_status_command(
@@ -1147,6 +1313,108 @@ async def handle_status_command(
     await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN)
 
 
+async def handle_track_habit_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle the /track_habit command with placeholder functionality.
+
+    This is a placeholder implementation for future habit tracking features.
+
+    Args:
+        update: The update object from Telegram
+        context: The context object from Telegram
+    """
+    if not update.message or not update.effective_user:
+        logger.warning("Received track_habit command without message or effective_user")
+        return
+
+    placeholder_message = (
+        "📈 <b>Track Habit</b>\n\n"
+        "🚧 This feature is coming soon!\n\n"
+        "In the future, you'll be able to:\n"
+        "• Track daily habits and routines\n"
+        "• Set habit goals and reminders\n"
+        "• View progress and statistics\n"
+        "• Get motivational insights\n\n"
+        "Stay tuned for updates! 🎯"
+    )
+
+    # Send placeholder message with persistent keyboard
+    keyboard_manager = PersistentKeyboardManager()
+    await update.message.reply_text(
+        placeholder_message,
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard_manager.create_main_keyboard(),
+    )
+    logger.info(
+        f"Sent track_habit placeholder message to user {update.effective_user.id}"
+    )
+
+
+async def handle_keyboard_button(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle persistent keyboard button presses.
+
+    This handler intercepts keyboard button presses and routes them to the
+    corresponding command handlers, ensuring identical behavior between
+    buttons and typed commands.
+
+    Args:
+        update: The update object from Telegram
+        context: The context object from Telegram
+    """
+    if not update.message or not update.message.text or not update.effective_user:
+        return
+
+    # Initialize keyboard manager
+    keyboard_manager = PersistentKeyboardManager()
+
+    # Check if this is a keyboard button press
+    command = await keyboard_manager.handle_keyboard_button(update, context)
+
+    if not command:
+        # Not a keyboard button, let other handlers process it
+        return
+
+    logger.info(
+        f"Processing keyboard button '{update.message.text}' as command: /{command}"
+    )
+
+    # Route to the appropriate command handler based on the command
+    try:
+        if command == "briefing":
+            await handle_briefing_command(update, context)
+        elif command == "add_task":
+            # Clear args to trigger dialog mode for keyboard buttons
+            context.args = []
+            await handle_add_task_command(update, context)
+        elif command == "add_countdown":
+            # Clear args to trigger dialog mode for keyboard buttons
+            context.args = []
+            await handle_add_countdown_command(update, context)
+        elif command == "track_habit":
+            await handle_track_habit_command(update, context)
+        elif command == "memory":
+            await handle_memory_command(update, context)
+        elif command == "update_settings":
+            await start_update_settings(update, context)
+        else:
+            logger.warning(f"Unknown command from keyboard button: {command}")
+            await update.message.reply_text(
+                f"❌ Sorry, the command '{command}' is not implemented yet.",
+                parse_mode=ParseMode.HTML,
+            )
+    except Exception as e:
+        logger.error(
+            f"Error handling keyboard button command '{command}': {e}", exc_info=True
+        )
+        await update.message.reply_text(
+            "❌ Sorry, there was an error processing your request. Please try again.",
+            parse_mode=ParseMode.HTML,
+        )
+
+
 async def create_telegram_client() -> TelegramClient:
     """Create a TelegramClient instance using environment variables.
 
@@ -1176,11 +1444,10 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("ignore_email", handle_ignore_email_command)
     await client.register_command_handler("list_ignored", handle_list_ignored_command)
     await client.register_command_handler("status", handle_status_command)
-    await client.register_command_handler("memory_add", handle_memory_add_command)
     await client.register_command_handler("memory", handle_memory_command)
     await client.register_command_handler("memories", handle_memory_command)
-    await client.register_command_handler("add_task", handle_add_task_command)
     await client.register_command_handler("add_countdown", handle_add_countdown_command)
+    await client.register_command_handler("track_habit", handle_track_habit_command)
     # Settings conversation handler
     settings_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],
@@ -1206,7 +1473,58 @@ async def create_telegram_client() -> TelegramClient:
         fallbacks=[CommandHandler("cancel", cancel_update)],
     )
 
+    # Memory input dialog handler
+    memory_input_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("memory_add", handle_memory_add_command)],
+        states={
+            ConversationState.MEMORY_INPUT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, handle_memory_input_dialog
+                )
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_update)],
+        per_message=False,
+        per_chat=True,
+        per_user=True,
+    )
+
+    # Task input dialog handler
+    task_input_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("add_task", handle_add_task_command)],
+        states={
+            ConversationState.TASK_INPUT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, handle_task_input_dialog
+                )
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_update)],
+        per_message=False,
+        per_chat=True,
+        per_user=True,
+    )
+
+    # Countdown input dialog handler
+    countdown_input_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("add_countdown", handle_add_countdown_command)],
+        states={
+            ConversationState.COUNTDOWN_INPUT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, handle_countdown_input_dialog
+                )
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_update)],
+        per_message=False,
+        per_chat=True,
+        per_user=True,
+    )
+
     await client.register_handler(settings_conv_handler)
     await client.register_handler(memory_delete_conv_handler)
+    await client.register_handler(memory_input_conv_handler)
+    await client.register_handler(task_input_conv_handler)
+    await client.register_handler(countdown_input_conv_handler)
 
     return client

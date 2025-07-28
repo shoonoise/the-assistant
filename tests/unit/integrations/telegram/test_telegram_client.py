@@ -8,8 +8,9 @@ import pytest
 from telegram import Bot, Chat, Message, Update, User
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TelegramError
+from telegram.ext import ConversationHandler
 
-from the_assistant.integrations.telegram.constants import SettingKey
+from the_assistant.integrations.telegram.constants import ConversationState, SettingKey
 from the_assistant.integrations.telegram.telegram_client import (
     TelegramClient,
     handle_add_countdown_command,
@@ -198,8 +199,8 @@ class TestTelegramClient:
 
             # Verify handlers were added
             assert (
-                mock_app.add_handler.call_count == 3
-            )  # 2 commands + 1 unknown command handler
+                mock_app.add_handler.call_count == 4
+            )  # 2 commands + 1 keyboard button handler + 1 unknown command handler
 
             # Verify application was stored
             assert telegram_client.application == mock_app
@@ -508,7 +509,8 @@ class TestUpdateSettings:
         assert mock_update.message.reply_text.called
 
     @pytest.mark.asyncio
-    async def test_memory_add_command(self, mock_update, mock_context):
+    async def test_memory_add_command_direct_mode(self, mock_update, mock_context):
+        """Test memory_add command with inline arguments (direct mode)."""
         user = SimpleNamespace(id=1, telegram_chat_id=123)
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
@@ -521,20 +523,44 @@ class TestUpdateSettings:
                 return_value=user_service,
             ),
             patch(
-                "the_assistant.integrations.telegram.telegram_client.datetime"
+                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                return_value=user_service,
+            ),
+            patch(
+                "the_assistant.integrations.telegram.enhanced_command_handlers.datetime"
             ) as mock_dt,
         ):
             mock_dt.now.return_value = datetime(2024, 1, 1, tzinfo=UTC)
             mock_dt.UTC = UTC
             mock_context.args = ["remember this"]
-            await handle_memory_add_command(mock_update, mock_context)
+            result = await handle_memory_add_command(mock_update, mock_context)
 
+        # Should return ConversationHandler.END for direct mode
+        assert result == ConversationHandler.END
         assert user_service.set_setting.await_count == 1
         call_args = user_service.set_setting.call_args[0]
         assert call_args[0] == 1
         assert call_args[1] == SettingKey.MEMORIES
         memories = call_args[2]
         assert list(memories.values())[0]["user_input"] == "remember this"
+
+    @pytest.mark.asyncio
+    async def test_memory_add_command_dialog_mode(self, mock_update, mock_context):
+        """Test memory_add command without arguments (dialog mode)."""
+        mock_context.args = []  # No arguments to trigger dialog mode
+
+        result = await handle_memory_add_command(mock_update, mock_context)
+
+        # Should return MEMORY_INPUT state for dialog mode
+        assert result == ConversationState.MEMORY_INPUT
+        # Should send a prompt message
+        mock_update.message.reply_text.assert_called_once()
+        call_args = mock_update.message.reply_text.call_args
+        assert "Write anything you want me to remember" in call_args[0][0]
 
     @pytest.mark.asyncio
     async def test_memory_command_lists(self, mock_update, mock_context):
@@ -727,3 +753,36 @@ class TestUpdateSettings:
         user_service.create_countdown.assert_not_called()
         assert mock_update.message.reply_text.called
         assert "parse" in mock_update.message.reply_text.call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_handle_help_command(self, mock_update, mock_context):
+        """Test that help command uses HTML formatting and MessageFormatter."""
+        from the_assistant.integrations.telegram.telegram_client import (
+            handle_help_command,
+        )
+
+        await handle_help_command(mock_update, mock_context)
+
+        # Verify the message was sent
+        assert mock_update.message.reply_text.called
+
+        # Get the call arguments
+        call_args = mock_update.message.reply_text.call_args
+        message_text = call_args[0][0]
+
+        # Verify HTML formatting is used
+        assert call_args[1]["parse_mode"] == ParseMode.HTML
+
+        # Verify the message contains expected HTML tags
+        assert "<b>📚 Available Commands</b>" in message_text
+        assert "<b>🤖 Automatic Features:</b>" in message_text
+        assert "<b>ℹ️ Additional Info:</b>" in message_text
+
+        # Verify commands are properly formatted
+        assert "/start -" in message_text
+        assert "/help -" in message_text
+        assert "/briefing -" in message_text
+
+        # Verify no markdown formatting is used
+        assert "**" not in message_text
+        assert "***" not in message_text

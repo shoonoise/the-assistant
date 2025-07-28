@@ -8,6 +8,12 @@ class ConversationState(IntEnum):
     ENTER_VALUE = 1
     SELECT_MEMORY_TO_DELETE = 2
 
+    # New states for dialog mode commands
+    MEMORY_INPUT = 3
+    TASK_INPUT = 4
+    COUNTDOWN_INPUT = 5
+    EMAIL_PATTERN_INPUT = 6
+
 
 class SettingKey(str, Enum):
     """Names of supported user settings."""
@@ -26,4 +32,15 @@ SETTINGS_LABEL_MAP: dict[str, SettingKey] = {
     "About me": SettingKey.ABOUT_ME,
     "Location": SettingKey.LOCATION,
     "Ignored email senders": SettingKey.IGNORE_EMAILS,
+}
+
+
+# Keyboard button to command mapping dictionary
+KEYBOARD_COMMAND_MAP: dict[str, str] = {
+    "📊 Briefing": "briefing",
+    "📅 Schedule Task": "add_task",
+    "⏰ Add Countdown": "add_countdown",
+    "📈 Track Habit": "track_habit",
+    "🧠 Memories": "memory",
+    "⚙️ Settings": "update_settings",
 }
