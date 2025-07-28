@@ -17,24 +17,20 @@ class TickTask(BaseAssistantModel):
     tags: list[str] = Field(default_factory=list, description="Task tags")
 
     @classmethod
-    def from_ticktask(cls, task: object) -> "TickTask":
-        if isinstance(task, dict):
-            get = task.get
-            list_obj = task.get("list") or {}
-        else:
-
-            def get(k: str, d=None):
-                return getattr(task, k, d)
-
-            list_obj = getattr(task, "list", None) or {}
-        return cls(
-            id=get("id", ""),
-            title=get("title", ""),
-            due_date=get("dueDate"),
-            start_date=get("startDate"),
-            completed=get("is_completed", False) or get("status", 0) > 0,
-            project=getattr(list_obj, "name", None)
-            if not isinstance(list_obj, dict)
-            else list_obj.get("name"),
-            tags=list(get("tags", [])),
+    def from_ticktask(cls, task: dict[str, object]) -> "TickTask":
+        """Create a TickTask from raw API data."""
+        status = int(task.get("status", 0))
+        list_info = task.get("list")
+        return cls.model_validate(
+            {
+                "id": task["id"],
+                "title": task["title"],
+                "due_date": task.get("dueDate"),
+                "start_date": task.get("startDate"),
+                "completed": bool(task.get("is_completed") or status > 0),
+                "project": list_info.get("name")
+                if isinstance(list_info, dict)
+                else None,
+                "tags": task.get("tags", []),
+            }
         )

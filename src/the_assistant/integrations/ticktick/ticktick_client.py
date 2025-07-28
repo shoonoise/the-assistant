@@ -28,15 +28,12 @@ class TickTickClient:
             account=self.account,
             user_service=get_user_service(),
         )
-        self._fallback_token = settings.ticktick_access_token
 
     async def _get_token(self) -> str:
         token = await self._token_store.get(self.user_id)
-        if token:
-            return token
-        if self._fallback_token:
-            return self._fallback_token
-        raise ValueError("TickTick access token not configured")
+        if token is None:
+            raise ValueError("TickTick access token not configured")
+        return token
 
     async def _request(self, path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         token = await self._get_token()

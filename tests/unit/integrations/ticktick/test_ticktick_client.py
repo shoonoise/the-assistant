@@ -16,7 +16,7 @@ class DummyStore:
 
 @pytest.fixture
 def mock_settings(monkeypatch):
-    settings = SimpleNamespace(db_encryption_key="key", ticktick_access_token=None)
+    settings = SimpleNamespace(db_encryption_key="key")
     monkeypatch.setattr(
         "the_assistant.integrations.ticktick.ticktick_client.get_settings",
         lambda: settings,
