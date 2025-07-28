@@ -42,6 +42,10 @@ async def test_get_tasks_for_date(monkeypatch, mock_settings):
                 "status": 0,
                 "list": {"name": "Inbox"},
                 "tags": [],
+                "isAllDay": True,
+                "projectId": "inbox-id",
+                "repeatFlag": 0,
+                "priority": 3,
             }
         ]
 
@@ -62,6 +66,10 @@ async def test_get_tasks_for_date(monkeypatch, mock_settings):
     tasks = await client.get_tasks_for_date(date.today())
     assert len(tasks) == 1
     assert tasks[0].title == "A"
+    assert tasks[0].is_all_day is True
+    assert tasks[0].project_id == "inbox-id"
+    assert tasks[0].repeat_flag is False
+    assert tasks[0].priority == 3
 
 
 @pytest.mark.asyncio
@@ -78,6 +86,10 @@ async def test_get_tasks_ahead(monkeypatch, mock_settings):
                     "title": current.isoformat(),
                     "dueDate": current.isoformat() + "T00:00:00Z",
                     "status": 0,
+                    "isAllDay": False,
+                    "projectId": "p",
+                    "repeatFlag": 1,
+                    "priority": 1,
                 }
             )
             current += timedelta(days=1)
@@ -99,3 +111,6 @@ async def test_get_tasks_ahead(monkeypatch, mock_settings):
     client = TickTickClient(user_id=1)
     tasks = await client.get_tasks_ahead(2)
     assert len(tasks) == 2
+    assert tasks[0].project_id == "p"
+    assert tasks[0].repeat_flag is True
+    assert tasks[0].priority == 1

@@ -15,6 +15,10 @@ class TickTask(BaseAssistantModel):
     completed: bool = Field(description="Task completion status")
     project: str | None = Field(default=None, description="List or project name")
     tags: list[str] = Field(default_factory=list, description="Task tags")
+    is_all_day: bool = Field(default=False, description="Task spans the entire day")
+    project_id: str | None = Field(default=None, description="Project identifier")
+    repeat_flag: bool = Field(default=False, description="Task has a repeat rule")
+    priority: int | None = Field(default=None, description="Priority level")
 
     @classmethod
     def from_ticktask(cls, task: dict[str, object]) -> "TickTask":
@@ -32,6 +36,10 @@ class TickTask(BaseAssistantModel):
                 if isinstance(list_info, dict)
                 else None,
                 "tags": task.get("tags", []),
+                "is_all_day": bool(task.get("isAllDay")),
+                "project_id": task.get("projectId"),
+                "repeat_flag": bool(task.get("repeatFlag")),
+                "priority": task.get("priority"),
             }
         )
 
