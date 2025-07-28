@@ -114,5 +114,5 @@ async def revoke_auth(
         await store.delete(user_id)
         return {"message": "TickTick authentication revoked", "user_id": user_id}
     except Exception as e:
-        logger.error(f"Failed to revoke auth: {e}")
+        logger.error(f"Failed to revoke auth due to {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Failed to revoke auth") from e
