@@ -21,6 +21,10 @@ from .telegram_activities import (
     send_formatted_message,
     send_message,
 )
+from .ticktick_activities import (
+    get_tasks_for_date,
+    get_tasks_next_days,
+)
 from .user_activities import (
     get_user_accounts,
 )
@@ -39,6 +43,8 @@ __all__ = [
     "get_user_accounts",
     # Weather activities
     "get_weather_forecast",
+    "get_tasks_for_date",
+    "get_tasks_next_days",
     # Telegram activities
     "build_daily_briefing",
     "build_briefing_summary",
