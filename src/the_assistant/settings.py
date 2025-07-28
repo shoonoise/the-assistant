@@ -33,6 +33,15 @@ class Settings(BaseSettings):
         ]
     )
 
+    # TickTick OAuth2
+    ticktick_client_id: str | None = Field(None, env="TICKTICK_CLIENT_ID")
+    ticktick_client_secret: str | None = Field(None, env="TICKTICK_CLIENT_SECRET")
+    ticktick_oauth_redirect_uri: str = Field(
+        "http://localhost:9000/ticktick/oauth2callback",
+        env="TICKTICK_OAUTH_REDIRECT_URI",
+    )
+    ticktick_oauth_scopes: list[str] = Field(default_factory=lambda: ["tasks:read"])
+
     # Obsidian
     obsidian_vault_path: Path | None = Field(Path("/vault"), env="OBSIDIAN_VAULT_PATH")
 

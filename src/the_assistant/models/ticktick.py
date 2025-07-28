@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from pydantic import Field
 
@@ -34,3 +34,35 @@ class TickTask(BaseAssistantModel):
                 "tags": task.get("tags", []),
             }
         )
+
+
+class TickToken(BaseAssistantModel):
+    """OAuth2 token for TickTick API."""
+
+    access_token: str = Field(description="Access token")
+    refresh_token: str | None = Field(default=None, description="Refresh token")
+    expires_at: datetime | None = Field(
+        default=None, description="Access token expiration time"
+    )
+    token_type: str = Field(default="Bearer", description="Token type")
+
+    @classmethod
+    def from_token_response(cls, data: dict[str, object]) -> "TickToken":
+        """Create :class:`TickToken` from token endpoint response."""
+        expires_in = int(data.get("expires_in", 0))
+        expires_at = (
+            datetime.now(UTC) + timedelta(seconds=expires_in) if expires_in else None
+        )
+        return cls(
+            access_token=str(data["access_token"]),
+            refresh_token=data.get("refresh_token"),
+            expires_at=expires_at,
+            token_type=str(data.get("token_type", "Bearer")),
+        )
+
+    @property
+    def is_expired(self) -> bool:
+        """Return ``True`` if the token is expired."""
+        if self.expires_at is None:
+            return False
+        return datetime.now(UTC) >= self.expires_at

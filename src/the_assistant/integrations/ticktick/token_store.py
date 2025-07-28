@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+
 from cryptography.fernet import Fernet
 
 from ...db import UserService, get_user_service
+from ...models.ticktick import TickToken
 
 
 class TickTickTokenStore:
@@ -18,14 +21,15 @@ class TickTickTokenStore:
         self.account = account or "default"
         self.user_service = user_service or get_user_service()
 
-    async def get(self, user_id: int) -> str | None:
+    async def get(self, user_id: int) -> TickToken | None:
         enc = await self.user_service.get_ticktick_token(user_id, account=self.account)
         if enc is None:
             return None
-        return self.fernet.decrypt(enc.encode()).decode()
+        data = json.loads(self.fernet.decrypt(enc.encode()).decode())
+        return TickToken.model_validate(data)
 
-    async def save(self, user_id: int, token: str) -> None:
-        enc = self.fernet.encrypt(token.encode()).decode()
+    async def save(self, user_id: int, token: TickToken) -> None:
+        enc = self.fernet.encrypt(json.dumps(token.model_dump()).encode()).decode()
         await self.user_service.set_ticktick_token(user_id, enc, account=self.account)
 
     async def delete(self, user_id: int) -> None:

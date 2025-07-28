@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .activities.google_activities import get_google_client
 from .integrations.google.oauth_router import router as google_oauth_router
+from .integrations.ticktick.oauth_router import router as ticktick_oauth_router
 from .settings import get_settings
 
 app = FastAPI(title="The Assistant", version="0.1.0")
@@ -18,6 +19,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Include routers
 app.include_router(google_oauth_router)
+app.include_router(ticktick_oauth_router)
 
 
 # Redirect for Google OAuth callback (temporary fix)

@@ -4,19 +4,26 @@ from types import SimpleNamespace
 import pytest
 
 from the_assistant.integrations.ticktick.ticktick_client import TickTickClient
+from the_assistant.models.ticktick import TickToken
 
 
 class DummyStore:
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - simple init
         pass
 
-    async def get(self, user_id: int) -> str | None:  # noqa: D401 - simple return
-        return "token"
+    async def get(self, user_id: int) -> TickToken | None:  # noqa: D401 - simple return
+        return TickToken(access_token="token")
 
 
 @pytest.fixture
 def mock_settings(monkeypatch):
-    settings = SimpleNamespace(db_encryption_key="key")
+    settings = SimpleNamespace(
+        db_encryption_key="key",
+        ticktick_client_id="id",
+        ticktick_client_secret="secret",
+        ticktick_oauth_redirect_uri="http://localhost",
+        ticktick_oauth_scopes=["tasks:read"],
+    )
     monkeypatch.setattr(
         "the_assistant.integrations.ticktick.ticktick_client.get_settings",
         lambda: settings,

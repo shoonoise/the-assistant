@@ -15,7 +15,7 @@ from .activity_models import (
 )
 from .google import CalendarEvent
 from .obsidian import NoteFilters
-from .ticktick import TickTask
+from .ticktick import TickTask, TickToken
 from .weather import HourlyForecast, WeatherForecast
 
 __all__ = [
@@ -30,4 +30,5 @@ __all__ = [
     "WeatherForecast",
     "HourlyForecast",
     "TickTask",
+    "TickToken",
 ]
