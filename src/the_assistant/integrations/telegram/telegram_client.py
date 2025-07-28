@@ -185,13 +185,13 @@ class TelegramClient:
         Commands are taken from the registered command handlers.
         """
         try:
-            # Create BotCommand objects from registered commands
+            # Create BotCommand objects from all known commands
             commands = [
                 BotCommand(
-                    command=cmd, description=COMMAND_REGISTRY.get(cmd, "No description")
+                    command=cmd,
+                    description=COMMAND_REGISTRY.get(cmd, "No description"),
                 )
-                for cmd in self._command_handlers.keys()
-                if cmd in COMMAND_REGISTRY  # Only include commands with descriptions
+                for cmd in COMMAND_REGISTRY.keys()
             ]
 
             # Set the commands with Telegram
@@ -1427,7 +1427,6 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("memory", handle_memory_command)
     await client.register_command_handler("memories", handle_memory_command)
     await client.register_command_handler("memory_add", handle_memory_add_command)
-    await client.register_command_handler("memory_delete", start_memory_delete)
     await client.register_command_handler("add_task", handle_add_task_command)
     await client.register_command_handler("add_countdown", handle_add_countdown_command)
     await client.register_command_handler("track_habit", handle_track_habit_command)

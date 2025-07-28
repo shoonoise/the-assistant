@@ -21,6 +21,7 @@ from the_assistant.integrations.telegram.telegram_client import (
     handle_memory_add_command,
     handle_memory_command,
     handle_setting_value_input,
+    select_memory_to_delete,
     start_memory_delete,
     start_update_settings,
 )
@@ -610,6 +611,35 @@ class TestUpdateSettings:
             await start_memory_delete(mock_update, mock_context)
 
         assert user_service.set_setting.await_count == 1
+        args = user_service.set_setting.call_args[0]
+        assert len(args[2]) == 1
+
+    @pytest.mark.asyncio
+    async def test_memory_delete_conversation(self, mock_update, mock_context):
+        """Select memory via dialog mode and ensure it is removed."""
+        user = SimpleNamespace(id=1, telegram_chat_id=123)
+        mems = {
+            "2024-01-01 00:00:00": {"user_input": "a"},
+            "2024-01-02 00:00:00": {"user_input": "b"},
+        }
+        user_service = AsyncMock()
+        user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
+        user_service.get_setting = AsyncMock(return_value=mems)
+        user_service.set_setting = AsyncMock()
+
+        with patch(
+            "the_assistant.integrations.telegram.telegram_client.get_user_service",
+            return_value=user_service,
+        ):
+            mock_context.args = []
+            state = await start_memory_delete(mock_update, mock_context)
+            assert state == ConversationState.SELECT_MEMORY_TO_DELETE
+
+            # Simulate selecting the first memory
+            mock_update.message.text = "1. a"
+            await select_memory_to_delete(mock_update, mock_context)
+
+        user_service.set_setting.assert_awaited_once()
         args = user_service.set_setting.call_args[0]
         assert len(args[2]) == 1
 
