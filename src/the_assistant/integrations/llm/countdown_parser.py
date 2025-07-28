@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from json import JSONDecodeError
 
 from dateutil.parser import parse as parse_date
@@ -33,10 +33,18 @@ class CountdownParser:
         content = getattr(response, "content", str(response))
         try:
             data = json.loads(content)
-            date_str = data.get("date")
-            description = str(data.get("description", ""))
-            event_time = parse_date(date_str) if date_str else None
-        except (JSONDecodeError, ValueError):
-            event_time = None
-            description = content
+        except JSONDecodeError:
+            return None, content
+
+        description = str(data.get("description", ""))
+        event_time = None
+        date_str = data.get("date")
+        if date_str:
+            try:
+                event_time = parse_date(date_str)
+                if event_time.tzinfo is None:
+                    event_time = event_time.replace(tzinfo=UTC)
+            except ValueError:
+                event_time = None
+
         return event_time, description
