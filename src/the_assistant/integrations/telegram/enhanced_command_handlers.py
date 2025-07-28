@@ -42,6 +42,7 @@ class MemoryAddHandler(FlexibleCommandHandler):
             context: The context object from Telegram
             args: List of command arguments
         """
+        keyboard_manager = PersistentKeyboardManager()
         text = " ".join(args).strip()
 
         # Validate input
@@ -49,11 +50,10 @@ class MemoryAddHandler(FlexibleCommandHandler):
             text
         )
         if not is_valid:
-            keyboard_manager = PersistentKeyboardManager()
-            await update.message.reply_text(
+            await keyboard_manager.send_with_keyboard(
+                update,
                 f"❌ {validation_message}",
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -65,11 +65,8 @@ class MemoryAddHandler(FlexibleCommandHandler):
 
         # Send confirmation
         confirmation = MessageFormatter.format_confirmation("Memory added", text)
-        keyboard_manager = PersistentKeyboardManager()
-        await update.message.reply_text(
-            confirmation,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard_manager.create_main_keyboard(),
+        await keyboard_manager.send_with_keyboard(
+            update, confirmation, parse_mode=ParseMode.HTML
         )
 
     async def handle_dialog_mode(
@@ -145,6 +142,7 @@ class AddTaskHandler(FlexibleCommandHandler):
             context: The context object from Telegram
             args: List of command arguments
         """
+        keyboard_manager = PersistentKeyboardManager()
         raw_instruction = " ".join(args).strip()
 
         # Validate input
@@ -152,11 +150,10 @@ class AddTaskHandler(FlexibleCommandHandler):
             raw_instruction
         )
         if not is_valid:
-            keyboard_manager = PersistentKeyboardManager()
-            await update.message.reply_text(
+            await keyboard_manager.send_with_keyboard(
+                update,
                 f"❌ {validation_message}",
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -170,11 +167,8 @@ class AddTaskHandler(FlexibleCommandHandler):
         confirmation = MessageFormatter.format_confirmation(
             "Task added", raw_instruction
         )
-        keyboard_manager = PersistentKeyboardManager()
-        await update.message.reply_text(
-            confirmation,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard_manager.create_main_keyboard(),
+        await keyboard_manager.send_with_keyboard(
+            update, confirmation, parse_mode=ParseMode.HTML
         )
 
     async def handle_dialog_mode(
@@ -246,6 +240,7 @@ class AddCountdownHandler(FlexibleCommandHandler):
             context: The context object from Telegram
             args: List of command arguments
         """
+        keyboard_manager = PersistentKeyboardManager()
         raw_text = " ".join(args).strip()
 
         # Validate input
@@ -253,11 +248,10 @@ class AddCountdownHandler(FlexibleCommandHandler):
             raw_text
         )
         if not is_valid:
-            keyboard_manager = PersistentKeyboardManager()
-            await update.message.reply_text(
+            await keyboard_manager.send_with_keyboard(
+                update,
                 f"❌ {validation_message}",
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -269,11 +263,8 @@ class AddCountdownHandler(FlexibleCommandHandler):
 
         # Send confirmation
         confirmation = MessageFormatter.format_confirmation("Countdown added", raw_text)
-        keyboard_manager = PersistentKeyboardManager()
-        await update.message.reply_text(
-            confirmation,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard_manager.create_main_keyboard(),
+        await keyboard_manager.send_with_keyboard(
+            update, confirmation, parse_mode=ParseMode.HTML
         )
 
     async def handle_dialog_mode(
@@ -345,6 +336,7 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
             context: The context object from Telegram
             args: List of command arguments
         """
+        keyboard_manager = PersistentKeyboardManager()
         pattern = args[0].strip() if args else ""
 
         # Validate input
@@ -352,11 +344,10 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
             pattern
         )
         if not is_valid:
-            keyboard_manager = PersistentKeyboardManager()
-            await update.message.reply_text(
+            await keyboard_manager.send_with_keyboard(
+                update,
                 f"❌ {validation_message}",
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard_manager.create_main_keyboard(),
             )
             return
 
@@ -372,11 +363,8 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
             "Emails matching this pattern will no longer trigger notifications.\n"
             "Use /list_ignored to see all ignored patterns."
         )
-        keyboard_manager = PersistentKeyboardManager()
-        await update.message.reply_text(
-            confirmation,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard_manager.create_main_keyboard(),
+        await keyboard_manager.send_with_keyboard(
+            update, confirmation, parse_mode=ParseMode.HTML
         )
 
     async def handle_dialog_mode(
@@ -402,10 +390,8 @@ class IgnoreEmailHandler(FlexibleCommandHandler):
         )
 
         keyboard_manager = PersistentKeyboardManager()
-        await update.message.reply_text(
-            usage_message,
-            parse_mode=ParseMode.HTML,
-            reply_markup=keyboard_manager.create_main_keyboard(),
+        await keyboard_manager.send_with_keyboard(
+            update, usage_message, parse_mode=ParseMode.HTML
         )
 
     async def _store_email_pattern(self, user: Any, pattern: str) -> None:

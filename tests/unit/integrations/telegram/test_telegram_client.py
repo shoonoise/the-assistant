@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Bot, Chat, InlineKeyboardMarkup, Message, Update, User
+from telegram import Bot, Chat, Message, Update, User
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TelegramError
 from telegram.ext import ConversationHandler
@@ -120,9 +120,7 @@ class TestTelegramClient:
         """Test successful message sending."""
         # Mock user service to return a user with telegram_chat_id
         mock_user = SimpleNamespace(telegram_chat_id=123)
-        with patch(
-            "the_assistant.integrations.telegram.telegram_client.get_user_service"
-        ) as mock_get_service:
+        with patch("the_assistant.db.get_user_service") as mock_get_service:
             mock_service = AsyncMock()
             mock_service.get_user_by_id.return_value = mock_user
             mock_get_service.return_value = mock_service
@@ -143,9 +141,7 @@ class TestTelegramClient:
         mock_user = SimpleNamespace(telegram_chat_id=123)
 
         telegram_client.bot.send_message.side_effect = NetworkError("Network error")
-        with patch(
-            "the_assistant.integrations.telegram.telegram_client.get_user_service"
-        ) as mock_get_service:
+        with patch("the_assistant.db.get_user_service") as mock_get_service:
             mock_service = AsyncMock()
             mock_service.get_user_by_id.return_value = mock_user
             mock_get_service.return_value = mock_service
@@ -225,7 +221,7 @@ class TestTelegramClient:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -268,7 +264,7 @@ class TestTelegramClient:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -294,19 +290,9 @@ class TestTelegramClient:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.args = []
             await handle_google_auth_command(mock_update, mock_context)
@@ -338,7 +324,7 @@ class TestTelegramClient:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -377,19 +363,9 @@ class TestTelegramClient:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             await handle_briefing_command(mock_update, mock_context)
 
@@ -419,7 +395,7 @@ class TestTelegramClient:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -441,15 +417,14 @@ class TestTelegramClient:
 
 
 class TestUpdateSettings:
-    """Tests for the inline settings interface."""
+    """Tests for the settings update conversation."""
 
     @pytest.mark.asyncio
     async def test_start_update_settings(self, mock_update, mock_context):
         await start_update_settings(mock_update, mock_context)
         mock_update.message.reply_text.assert_called_once()
-        args, kwargs = mock_update.message.reply_text.call_args
-        assert "choose" in args[0].lower()
-        assert isinstance(kwargs["reply_markup"], InlineKeyboardMarkup)
+        args, _ = mock_update.message.reply_text.call_args
+        assert "choose which setting" in args[0]
 
     @pytest.mark.asyncio
     async def test_handle_setting_value_input_trim_and_default(
@@ -459,19 +434,9 @@ class TestUpdateSettings:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.user_data = {"pending_setting": "greet"}
             mock_update.message.text = "  Hello  "
@@ -488,19 +453,9 @@ class TestUpdateSettings:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.user_data = {"pending_setting": "greet"}
             mock_update.message.text = ""
@@ -517,19 +472,9 @@ class TestUpdateSettings:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.user_data = {"pending_setting": "greet"}
             mock_update.message.text = "Hi"
@@ -545,19 +490,9 @@ class TestUpdateSettings:
         user_service.get_setting = AsyncMock(return_value=[])
         user_service.set_setting = AsyncMock()
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.args = ["*@spam.com"]
             await handle_ignore_email_command(mock_update, mock_context)
@@ -578,15 +513,15 @@ class TestUpdateSettings:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -632,19 +567,9 @@ class TestUpdateSettings:
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=user)
         user_service.get_setting = AsyncMock(return_value=mems)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             await handle_memory_command(mock_update, mock_context)
 
@@ -664,19 +589,9 @@ class TestUpdateSettings:
         user_service.get_setting = AsyncMock(return_value=mems)
         user_service.set_setting = AsyncMock()
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.args = ["1"]
             # Use start_memory_delete instead of handle_memory_delete_command
@@ -700,15 +615,7 @@ class TestUpdateSettings:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -733,19 +640,9 @@ class TestUpdateSettings:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.args = ["do", "something"]
             await handle_add_task_command(mock_update, mock_context)
@@ -765,15 +662,7 @@ class TestUpdateSettings:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -801,15 +690,7 @@ class TestUpdateSettings:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(
@@ -829,19 +710,9 @@ class TestUpdateSettings:
         user_service = AsyncMock()
         user_service.get_user_by_telegram_chat_id = AsyncMock(return_value=None)
 
-        with (
-            patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
-                return_value=user_service,
-            ),
+        with patch(
+            "the_assistant.db.get_user_service",
+            return_value=user_service,
         ):
             mock_context.args = ["party"]
             await handle_add_countdown_command(mock_update, mock_context)
@@ -861,15 +732,7 @@ class TestUpdateSettings:
 
         with (
             patch(
-                "the_assistant.integrations.telegram.telegram_client.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_command_handlers.get_user_service",
-                return_value=user_service,
-            ),
-            patch(
-                "the_assistant.integrations.telegram.enhanced_handlers.get_user_service",
+                "the_assistant.db.get_user_service",
                 return_value=user_service,
             ),
             patch(

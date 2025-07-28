@@ -33,7 +33,7 @@ async def test_oauth_callback_sends_notification():
 
     with (
         patch(
-            "the_assistant.integrations.google.oauth_router.get_user_service",
+            "the_assistant.db.get_user_service",
             return_value=service,
         ),
         patch(

@@ -8,15 +8,9 @@ for all test categories (unit, integration, obsidian-specific).
 
 import asyncio
 import os
-import sys
 from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
-
-# Ensure project root is on the Python path for "src" imports
-ROOT_DIR = Path(__file__).resolve().parents[1] / "src"
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 
 import pytest
 import yaml

@@ -4,7 +4,7 @@ from typing import Any, cast
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from .constants import SETTINGS_LABEL_MAP
+from .constants import SETTINGS_LABEL_LOOKUP, SettingKey
 
 logger = logging.getLogger(__name__)
 
@@ -46,5 +46,5 @@ class SettingsInterfaceManager:
             return
 
         cast(dict[str, Any], context.user_data)["pending_setting"] = key
-        label = next((k for k, v in SETTINGS_LABEL_MAP.items() if v.value == key), key)
+        label = SETTINGS_LABEL_LOOKUP.get(SettingKey(key), key)
         await query.edit_message_text(f"Enter new value for {label}:")
