@@ -97,7 +97,7 @@ async def check_auth_status(
 ):
     try:
         return {"authenticated": await client.is_authenticated(), "user_id": user_id}
-    except Exception as e:
+    except (ValueError, HTTPError) as e:
         logger.error(f"Failed to check auth status: {e}")
         raise HTTPException(
             status_code=500, detail="Failed to check auth status"
