@@ -1,6 +1,7 @@
 """Telegram client for The Assistant."""
 
 import asyncio
+import html
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -233,27 +234,27 @@ class TelegramClient:
 
         # Create a helpful error message with command descriptions
         error_message = (
-            f"❓ Sorry, I don't understand the command `{command}`.\n\n"
-            "**Available commands:**\n"
+            f"❓ Sorry, I don't understand the command <code>{html.escape(command)}</code>.\n\n"
+            "<b>Available commands:</b>\n"
         )
 
         # Add each available command with its description
         for cmd, description in COMMAND_REGISTRY.items():
             if cmd in self._command_handlers:
-                error_message += f"• /{cmd} - {description}\n"
+                error_message += f"• /{cmd} - {html.escape(description)}\n"
 
         error_message += (
-            "\n💡 **Tips:**\n"
+            "\n💡 <b>Tips:</b>\n"
             "• Use the command menu (/) to see all commands\n"
             "• Type /help for detailed information\n"
             "• Commands support autocompletion"
         )
 
-        # Send the error message with markdown formatting
+        # Send the error message with HTML formatting
         keyboard_manager = PersistentKeyboardManager()
         await update.message.reply_text(
             error_message,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             reply_markup=keyboard_manager.create_main_keyboard(),
         )
 
@@ -562,6 +563,26 @@ async def handle_settings_command(
         else "Unknown"
     )
 
+    # Fetch all user settings
+    all_settings = await user_service.get_all_settings(user.id)
+
+    current_settings = ""
+    for key in [
+        SettingKey.GREET,
+        SettingKey.BRIEFING_TIME,
+        SettingKey.ABOUT_ME,
+        SettingKey.LOCATION,
+        SettingKey.IGNORE_EMAILS,
+    ]:
+        label = SETTINGS_LABEL_LOOKUP[key]
+        value = all_settings.get(key.value)
+        if isinstance(value, list):
+            display = ", ".join(value) if value else "Not set"
+        else:
+            display = str(value) if value else "Not set"
+        display = escape_markdown(display, version=2)
+        current_settings += f"• {label}: {display}\n"
+
     settings_message = (
         "⚙️ **Your Settings**\n\n"
         "**User Information:**\n"
@@ -569,6 +590,8 @@ async def handle_settings_command(
         f"• Name: {user.first_name or 'Not set'}\n"
         f"• Username: {username_display}\n"
         f"• Registered: {registered_display}\n\n"
+        "**Current Preferences:**\n"
+        f"{current_settings}\n"
         "**Available Settings Commands:**\n"
         "• /update\\_settings - Modify your preferences\n"
         "• /google\\_auth - Connect Google services\n"
@@ -1403,6 +1426,9 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("status", handle_status_command)
     await client.register_command_handler("memory", handle_memory_command)
     await client.register_command_handler("memories", handle_memory_command)
+    await client.register_command_handler("memory_add", handle_memory_add_command)
+    await client.register_command_handler("memory_delete", start_memory_delete)
+    await client.register_command_handler("add_task", handle_add_task_command)
     await client.register_command_handler("add_countdown", handle_add_countdown_command)
     await client.register_command_handler("track_habit", handle_track_habit_command)
     # Inline settings handlers
