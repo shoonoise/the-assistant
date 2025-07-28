@@ -55,7 +55,7 @@ class TickToken(BaseAssistantModel):
     token_type: str = Field(default="Bearer", description="Token type")
 
     @classmethod
-    def from_token_response(cls, data: dict[str, object]) -> "TickToken":
+    def from_token_response(cls, data: dict[str, Any]) -> "TickToken":
         """Create :class:`TickToken` from token endpoint response."""
         expires_in = int(data.get("expires_in", 0))
         expires_at = (
