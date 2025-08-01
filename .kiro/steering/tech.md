@@ -67,9 +67,19 @@ make fix && make test        # Format, lint, test
 make serve                   # Start FastAPI server
 docker-compose up -d         # Start all services
 
-# Database migrations
-uv run python scripts/create_migration.py "description"
-uv run python scripts/init_db_with_migrations.py
+# Database migrations (USE MAKEFILE COMMANDS - THEY WORK!)
+make migrate                 # Apply all pending migrations
+make migration-status        # Check current migration state
+make migration-history       # View migration history
+make migration MESSAGE="description"  # Create new migration
+
+# Migration troubleshooting (if needed)
+# 1. Check if database is running: docker-compose ps
+# 2. Check current status: make migration-status
+# 3. If revision conflicts, may need to merge heads:
+#    DATABASE_URL="postgresql+asyncpg://temporal:temporal@localhost:5432/the_assistant" uv run alembic merge heads -m "merge heads"
+# 4. If database has invalid revision, manually fix alembic_version table:
+#    docker exec temporal-postgresql psql -U temporal -d the_assistant -c "UPDATE alembic_version SET version_num = 'VALID_REVISION';"
 ```
 
 ## Security & Configuration (CRITICAL)

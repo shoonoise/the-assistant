@@ -10,6 +10,8 @@ from typing import Any, cast
 from telegram import (
     Bot,
     BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     Update,
@@ -19,13 +21,13 @@ from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
     MessageHandler,
     filters,
 )
-from telegram.helpers import escape_markdown
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
@@ -34,7 +36,12 @@ from the_assistant.integrations.google.client import GoogleClient
 from the_assistant.integrations.google.oauth_state import create_state_jwt
 from the_assistant.settings import get_settings
 
-from .constants import SETTINGS_LABEL_MAP, ConversationState, SettingKey
+from .constants import (
+    SETTINGS_DESCRIPTIONS,
+    SETTINGS_LABEL_MAP,
+    ConversationState,
+    SettingKey,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +59,11 @@ COMMAND_REGISTRY: dict[str, str] = {
     "status": "Check bot status and integrations",
     "memory_add": "Remember a fact about you",
     "memory": "List your stored memories",
+    "memories": "List your stored memories (alias for /memory)",
     "memory_delete": "Delete a memory by its id",
     "add_task": "Create a new scheduled task",
     "add_countdown": "Add a countdown event",
+    "cancel": "Cancel current settings operation and return to menu",
 }
 
 
@@ -102,7 +111,7 @@ class TelegramClient:
     async def send_message(
         self,
         text: str,
-        parse_mode: str = ParseMode.MARKDOWN,
+        parse_mode: str = ParseMode.HTML,
     ) -> bool:
         """Send a text message to the user's chat.
 
@@ -222,10 +231,10 @@ class TelegramClient:
         command = update.message.text.split()[0] if update.message.text else ""
         user_id = update.effective_user.id
 
-        # Create a helpful error message with command descriptions
+        # Create a helpful error message with command descriptions using HTML
         error_message = (
-            f"❓ Sorry, I don't understand the command `{command}`.\n\n"
-            "**Available commands:**\n"
+            f"❓ Sorry, I don't understand the command <code>{command}</code>.\n\n"
+            "<b>Available commands:</b>\n"
         )
 
         # Add each available command with its description
@@ -234,14 +243,14 @@ class TelegramClient:
                 error_message += f"• /{cmd} - {description}\n"
 
         error_message += (
-            "\n💡 **Tips:**\n"
+            "\n💡 <b>Tips:</b>\n"
             "• Use the command menu (/) to see all commands\n"
             "• Type /help for detailed information\n"
             "• Commands support autocompletion"
         )
 
-        # Send the error message with markdown formatting
-        await update.message.reply_text(error_message, parse_mode=ParseMode.MARKDOWN)
+        # Send the error message with HTML formatting
+        await update.message.reply_text(error_message, parse_mode=ParseMode.HTML)
 
         # Log the unknown command
         logger.warning(f"User {user_id} sent unknown command: {command}")
@@ -263,6 +272,16 @@ class TelegramClient:
         for command, handler in self._command_handlers.items():
             self.application.add_handler(CommandHandler(command, handler))
             logger.info(f"Added handler for command: /{command}")
+
+        # Register callback query handler for inline keyboards
+        self.application.add_handler(CallbackQueryHandler(handle_callback_query))
+        logger.info("Added callback query handler for inline keyboards")
+
+        # Register message handler for settings input
+        self.application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input)
+        )
+        logger.info("Added message handler for settings input")
 
         # Register additional handlers such as conversations BEFORE unknown command handler
         for handler in self._extra_handlers:
@@ -354,11 +373,11 @@ async def handle_start_command(
         "• Send notifications about upcoming trips\n"
         "• Provide morning briefings with your schedule and tasks\n"
         "• Respond to your commands for on-demand information\n\n"
-        f"✅ You've been registered with ID: `{user.id}`\n\n"
+        f"✅ You've been registered with ID: <code>{user.id}</code>\n\n"
         "Use /help to see all available commands or /settings to manage your preferences."
     )
 
-    await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(welcome_message, parse_mode=ParseMode.HTML)
     logger.info(f"Registered and sent welcome message to user {user.id}")
 
 
@@ -377,27 +396,27 @@ async def handle_help_command(
         logger.warning("Received help command without message or effective_user")
         return
 
-    # Build help message from command registry
-    help_message = "📚 **Available Commands**\n\n"
+    # Build help message from command registry using HTML formatting
+    help_message = "📚 <b>Available Commands</b>\n\n"
 
     # Add each command with its description
     for command, description in COMMAND_REGISTRY.items():
         help_message += f"/{command} - {description}\n"
 
     help_message += (
-        "\n**Automatic Features:**\n"
+        "\n<b>Automatic Features:</b>\n"
         "• Morning briefings with your daily schedule\n"
         "• Reminders about upcoming trips\n"
         "• Important task deadlines\n"
         "• Smart email filtering and notifications\n\n"
-        "**Tips:**\n"
+        "<b>Tips:</b>\n"
         "• Use the command menu (/) to see all available commands\n"
         "• Commands support autocompletion in most Telegram clients\n"
         "• Use /settings to customize your experience\n\n"
         "If you have any issues or questions, please contact your system administrator."
     )
 
-    await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(help_message, parse_mode=ParseMode.HTML)
     logger.info(f"Sent comprehensive help message to user {update.effective_user.id}")
 
 
@@ -488,9 +507,9 @@ async def handle_briefing_command(
 async def handle_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Handle the /settings command.
+    """Handle the /settings command with a menu interface.
 
-    This command shows the user's current settings and provides guidance on customization.
+    This command shows a menu where users can view current settings or modify them.
 
     Args:
         update: The update object from Telegram.
@@ -513,35 +532,36 @@ async def handle_settings_command(
             registered_at=datetime.now(UTC),
         )
 
-    # Create comprehensive settings message with proper escaping
-    username_display = f"@{user.username}" if user.username else "Not set"
-    registered_display = (
-        user.registered_at.strftime("%Y-%m-%d %H:%M UTC")
-        if user.registered_at
-        else "Unknown"
-    )
+    # Create menu with inline keyboard
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📋 Show Current Settings", callback_data="settings_show"
+            )
+        ],
+        [InlineKeyboardButton("✏️ Modify Settings", callback_data="settings_modify")],
+        [
+            InlineKeyboardButton(
+                "🔐 Google Authentication", callback_data="settings_google_auth"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📧 Email Filters", callback_data="settings_email_filters"
+            )
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     settings_message = (
-        "⚙️ **Your Settings**\n\n"
-        "**User Information:**\n"
-        f"• User ID: `{user.id}`\n"
-        f"• Name: {user.first_name or 'Not set'}\n"
-        f"• Username: {username_display}\n"
-        f"• Registered: {registered_display}\n\n"
-        "**Available Settings Commands:**\n"
-        "• /update\\_settings - Modify your preferences\n"
-        "• /google\\_auth - Connect Google services\n"
-        "• /ignore\\_email - Manage email filters\n\n"
-        "**Current Features:**\n"
-        "• Daily briefings\n"
-        "• Trip notifications\n"
-        "• Email filtering\n"
-        "• Calendar integration\n\n"
-        "Use /help to see all available commands\\."
+        "⚙️ <b>Settings Menu</b>\n\n"
+        "Choose an option below to view or modify your settings:"
     )
 
-    await update.message.reply_text(settings_message, parse_mode=ParseMode.MARKDOWN)
-    logger.info(f"Sent comprehensive settings to user {user_id}")
+    await update.message.reply_text(
+        settings_message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+    logger.info(f"Sent settings menu to user {user_id}")
 
 
 async def start_update_settings(
@@ -626,12 +646,26 @@ async def cancel_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     """Cancel the settings update conversation."""
 
     if update.message:
+        # Clear any awaiting states
+        user_data = cast(dict[str, Any], context.user_data)
+        user_data.pop("setting_key", None)
+        user_data.pop("setting_label", None)
+        user_data.pop("awaiting_setting_value", None)
+        user_data.pop("awaiting_email_pattern", None)
+
+        # Show settings menu instead of just cancelling
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "⚙️ Back to Settings Menu", callback_data="back_to_settings"
+                )
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await update.message.reply_text(
-            "Settings update cancelled.", reply_markup=ReplyKeyboardRemove()
+            "❌ Operation cancelled.", reply_markup=reply_markup
         )
-    user_data = cast(dict[str, Any], context.user_data)
-    user_data.pop("setting_key", None)
-    user_data.pop("setting_label", None)
     return ConversationHandler.END
 
 
@@ -669,11 +703,12 @@ async def handle_google_auth_command(
     if await client.is_authenticated():
         await update.message.reply_text(
             "✅ You are already authenticated with Google.\n\n"
-            "**Connected Services:**\n"
+            "<b>Connected Services:</b>\n"
             "• Google Calendar\n"
             "• Gmail\n"
             "• Google Drive (if needed)\n\n"
-            "Your Google integration is working properly!"
+            "Your Google integration is working properly!",
+            parse_mode=ParseMode.HTML,
         )
         return
 
@@ -682,16 +717,16 @@ async def handle_google_auth_command(
     auth_url = await client.generate_auth_url(state)
 
     message = (
-        "🔐 **Google Authentication Required**\n\n"
-        f"Please [click here to authorize]({auth_url}) access to your Google account.\n\n"
-        "**This will enable:**\n"
+        "🔐 <b>Google Authentication Required</b>\n\n"
+        f"Please <a href='{auth_url}'>click here to authorize</a> access to your Google account.\n\n"
+        "<b>This will enable:</b>\n"
         "• Calendar event notifications\n"
         "• Email monitoring and filtering\n"
         "• Smart briefing generation\n"
         "• Trip and event reminders\n\n"
         "You'll receive a confirmation message once the authentication is completed."
     )
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(message, parse_mode=ParseMode.HTML)
     logger.info(f"Sent Google auth link to user {chat_user.id}")
 
 
@@ -709,18 +744,18 @@ async def handle_ignore_email_command(
     if not args:
         # Show usage information
         usage_message = (
-            "📧 **Email Ignore Patterns**\n\n"
-            "**Usage:** `/ignore\\_email <pattern>`\n\n"
-            "**Examples:**\n"
-            "• `/ignore\\_email noreply@example\\.com` \\- Ignore specific email\n"
-            "• `/ignore\\_email @spam\\.com` \\- Ignore entire domain\n"
-            "• `/ignore\\_email newsletter` \\- Ignore emails containing 'newsletter'\n\n"
-            "**Other Commands:**\n"
-            "• `/list\\_ignored` \\- View all ignored patterns\n"
-            "• `/settings` \\- View your current settings"
+            "📧 <b>Email Ignore Patterns</b>\n\n"
+            "<b>Usage:</b> <code>/ignore_email &lt;pattern&gt;</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/ignore_email noreply@example.com</code> - Ignore specific email\n"
+            "• <code>/ignore_email @spam.com</code> - Ignore entire domain\n"
+            "• <code>/ignore_email newsletter</code> - Ignore emails containing 'newsletter'\n\n"
+            "<b>Other Commands:</b>\n"
+            "• /list_ignored - View all ignored patterns\n"
+            "• /settings - View your current settings"
         )
 
-        await update.message.reply_text(usage_message, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(usage_message, parse_mode=ParseMode.HTML)
         return
 
     mask = args[0].strip()
@@ -743,8 +778,9 @@ async def handle_ignore_email_command(
 
     if mask in ignored:
         await update.message.reply_text(
-            f"📧 Pattern `{mask}` is already in your ignore list\\.\n\n"
-            f"Use `/list\\_ignored` to see all ignored patterns\\."
+            f"📧 Pattern <code>{mask}</code> is already in your ignore list.\n\n"
+            f"Use /list_ignored to see all ignored patterns.",
+            parse_mode=ParseMode.HTML,
         )
         return
 
@@ -752,9 +788,10 @@ async def handle_ignore_email_command(
     await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS, ignored)
 
     await update.message.reply_text(
-        f"✅ Added `{mask}` to your email ignore list\\.\n\n"
-        f"Emails matching this pattern will no longer trigger notifications\\.\n"
-        f"Use `/list\\_ignored` to see all ignored patterns\\."
+        f"✅ Added <code>{mask}</code> to your email ignore list.\n\n"
+        f"Emails matching this pattern will no longer trigger notifications.\n"
+        f"Use /list_ignored to see all ignored patterns.",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -786,26 +823,29 @@ async def handle_list_ignored_command(
 
     if not ignored:
         message = (
-            "📧 **Email Ignore Patterns**\n\n"
-            "**No patterns currently ignored\\.**\n\n"
-            "Use `/ignore\\_email <pattern>` to add patterns to ignore\\."
+            "📧 <b>Email Ignore Patterns</b>\n\n"
+            "<b>No patterns currently ignored.</b>\n\n"
+            "Use <code>/ignore_email &lt;pattern&gt;</code> to add patterns to ignore."
         )
     else:
         message = (
-            "📧 **Email Ignore Patterns**\n\n"
-            f"**Currently ignoring {len(ignored)} pattern\\(s\\):**\n"
+            "📧 <b>Email Ignore Patterns</b>\n\n"
+            f"<b>Currently ignoring {len(ignored)} pattern(s):</b>\n"
         )
         for i, pattern in enumerate(ignored, 1):
-            escaped_pattern = escape_markdown(pattern, version=2)
-            message += f"{i}\\. `{escaped_pattern}`\n"
+            # HTML escape the pattern
+            escaped_pattern = (
+                pattern.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            message += f"{i}. <code>{escaped_pattern}</code>\n"
 
         message += (
-            "\n**Commands:**\n"
-            "• `/ignore\\_email <pattern>` \\- Add new pattern\n"
-            "• `/settings` \\- View all settings"
+            "\n<b>Commands:</b>\n"
+            "• /ignore_email &lt;pattern&gt; - Add new pattern\n"
+            "• /settings - View all settings"
         )
 
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(message, parse_mode=ParseMode.HTML)
 
 
 async def handle_memory_add_command(
@@ -884,13 +924,16 @@ async def handle_memory_command(
         return
 
     items = sorted(memories.items())
-    message = "🧠 **Your memories:**\n\n"
+    message = "🧠 <b>Your memories:</b>\n\n"
     for i, (_, mem) in enumerate(items, 1):
         txt = mem.get("user_input", "")
-        # Use plain text instead of markdown for user content to avoid parsing issues
-        message += f"{i}. {txt}\n"
-    message += "\nUse /memory_delete <id> to delete a memory."
-    await update.message.reply_text(message)
+        # HTML escape user content to avoid parsing issues
+        escaped_txt = (
+            txt.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+        message += f"{i}. {escaped_txt}\n"
+    message += "\nUse /memory_delete &lt;id&gt; to delete a memory."
+    await update.message.reply_text(message, parse_mode=ParseMode.HTML)
 
 
 async def start_memory_delete(
@@ -1128,23 +1171,23 @@ async def handle_status_command(
     ignored_count = len(raw_ignored) if isinstance(raw_ignored, list) else 0
 
     status_message = (
-        "🤖 **Bot Status**\n\n"
-        f"**User:** {user.first_name or 'Unknown'} \\(ID: {user.id}\\)\n"
-        f"**Registered:** {user.registered_at.strftime('%Y-%m-%d') if user.registered_at else 'Unknown'}\n\n"
-        f"**Integrations:**\n"
+        "🤖 <b>Bot Status</b>\n\n"
+        f"<b>User:</b> {user.first_name or 'Unknown'} (ID: {user.id})\n"
+        f"<b>Registered:</b> {user.registered_at.strftime('%Y-%m-%d') if user.registered_at else 'Unknown'}\n\n"
+        f"<b>Integrations:</b>\n"
         f"• Google Services: {google_status}\n"
         f"• Telegram: ✅ Connected\n\n"
-        f"**Settings:**\n"
+        f"<b>Settings:</b>\n"
         f"• Ignored email patterns: {ignored_count}\n\n"
-        f"**Available Features:**\n"
+        f"<b>Available Features:</b>\n"
         f"• Daily briefings\n"
         f"• Trip notifications\n"
         f"• Email filtering\n"
         f"• Calendar integration\n\n"
-        f"Use `/help` to see all available commands\\."
+        f"Use /help to see all available commands."
     )
 
-    await update.message.reply_text(status_message, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(status_message, parse_mode=ParseMode.HTML)
 
 
 async def create_telegram_client() -> TelegramClient:
@@ -1166,7 +1209,7 @@ async def create_telegram_client() -> TelegramClient:
     if not is_valid:
         raise ValueError("Failed to validate Telegram bot credentials")
 
-    # Register the default command handlers
+    # Register all command handlers from COMMAND_REGISTRY
     # Note: Descriptions are automatically taken from COMMAND_REGISTRY
     await client.register_command_handler("start", handle_start_command)
     await client.register_command_handler("help", handle_help_command)
@@ -1178,9 +1221,17 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_command_handler("status", handle_status_command)
     await client.register_command_handler("memory_add", handle_memory_add_command)
     await client.register_command_handler("memory", handle_memory_command)
-    await client.register_command_handler("memories", handle_memory_command)
+    await client.register_command_handler(
+        "memories", handle_memory_command
+    )  # Alias for memory
     await client.register_command_handler("add_task", handle_add_task_command)
     await client.register_command_handler("add_countdown", handle_add_countdown_command)
+
+    # Register conversation entry points as commands for menu visibility
+    # These will be handled by conversation handlers but need to be in the command menu
+    await client.register_command_handler("update_settings", start_update_settings)
+    await client.register_command_handler("memory_delete", start_memory_delete)
+
     # Settings conversation handler
     settings_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("update_settings", start_update_settings)],
@@ -1210,3 +1261,610 @@ async def create_telegram_client() -> TelegramClient:
     await client.register_handler(memory_delete_conv_handler)
 
     return client
+
+
+async def handle_callback_query(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle callback queries from inline keyboards.
+
+    Args:
+        update: The update object from Telegram.
+        context: The context object from Telegram.
+    """
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    await query.answer()  # Acknowledge the callback query
+
+    if query.data == "settings_show":
+        await show_current_settings(update, context)
+    elif query.data == "settings_modify":
+        await show_modify_settings_menu(update, context)
+    elif query.data == "settings_google_auth":
+        await handle_google_auth_from_menu(update, context)
+    elif query.data == "settings_email_filters":
+        await show_email_filters_menu(update, context)
+    elif query.data.startswith("modify_"):
+        await handle_setting_modification(update, context)
+    elif query.data == "email_filters_list":
+        await show_ignored_emails_from_menu(update, context)
+    elif query.data == "email_filters_add":
+        await prompt_add_email_filter(update, context)
+    elif query.data == "back_to_settings":
+        await show_settings_menu(update, context)
+
+
+async def show_current_settings(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show the user's current settings."""
+    query = update.callback_query
+    if not query or not query.from_user:
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(query.from_user.id)
+    if not user:
+        await query.edit_message_text(
+            "❌ User not found. Please use /start to register."
+        )
+        return
+
+    # Get current settings values
+    settings_values = {}
+    for setting_key in SettingKey:
+        value = await user_service.get_setting(user.id, setting_key)
+        settings_values[setting_key] = value
+
+    # Create comprehensive settings message
+    username_display = f"@{user.username}" if user.username else "Not set"
+    registered_display = (
+        user.registered_at.strftime("%Y-%m-%d %H:%M UTC")
+        if user.registered_at
+        else "Unknown"
+    )
+
+    settings_message = (
+        "📋 <b>Current Settings</b>\n\n"
+        "<b>User Information:</b>\n"
+        f"• User ID: <code>{user.id}</code>\n"
+        f"• Name: {user.first_name or 'Not set'}\n"
+        f"• Username: {username_display}\n"
+        f"• Registered: {registered_display}\n\n"
+        "<b>Preferences:</b>\n"
+    )
+
+    # Add each setting with its current value
+    for setting_key, description in SETTINGS_DESCRIPTIONS.items():
+        value = settings_values.get(setting_key)
+        if setting_key == SettingKey.IGNORE_EMAILS:
+            count = len(value) if isinstance(value, list) else 0
+            display_value = f"{count} pattern(s)" if count > 0 else "None"
+        else:
+            display_value = str(value) if value else "Not set"
+
+        settings_message += f"• {description}: <code>{display_value}</code>\n"
+
+    # Add back button
+    keyboard = [
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        settings_message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def show_modify_settings_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show the menu for modifying settings."""
+    query = update.callback_query
+    if not query:
+        return
+
+    keyboard = []
+    for label, setting_key in SETTINGS_LABEL_MAP.items():
+        if setting_key != SettingKey.IGNORE_EMAILS:  # Email filters have their own menu
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"✏️ {label}", callback_data=f"modify_{setting_key.value}"
+                    )
+                ]
+            )
+
+    keyboard.append(
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_settings")]
+    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    message = "✏️ <b>Modify Settings</b>\n\nSelect a setting to modify:"
+
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def handle_google_auth_from_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle Google authentication from the settings menu."""
+    query = update.callback_query
+    if not query or not query.from_user:
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(query.from_user.id)
+    if not user:
+        await query.edit_message_text(
+            "❌ User not found. Please use /start to register."
+        )
+        return
+
+    client = GoogleClient(user.id)
+    if await client.is_authenticated():
+        message = (
+            "✅ <b>Google Authentication Status</b>\n\n"
+            "You are already authenticated with Google.\n\n"
+            "<b>Connected Services:</b>\n"
+            "• Google Calendar\n"
+            "• Gmail\n"
+            "• Google Drive (if needed)\n\n"
+            "Your Google integration is working properly!"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_settings")]
+        ]
+    else:
+        settings = get_settings()
+        state = create_state_jwt(user.id, settings)
+        auth_url = await client.generate_auth_url(state)
+
+        message = (
+            "🔐 <b>Google Authentication Required</b>\n\n"
+            f"Please <a href='{auth_url}'>click here to authorize</a> access to your Google account.\n\n"
+            "<b>This will enable:</b>\n"
+            "• Calendar event notifications\n"
+            "• Email monitoring and filtering\n"
+            "• Smart briefing generation\n"
+            "• Trip and event reminders\n\n"
+            "You'll receive a confirmation message once the authentication is completed."
+        )
+        keyboard = [
+            [InlineKeyboardButton("🔗 Open Auth Link", url=auth_url)],
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_settings")],
+        ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def show_email_filters_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show the email filters menu."""
+    query = update.callback_query
+    if not query:
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📋 List Ignored Patterns", callback_data="email_filters_list"
+            )
+        ],
+        [InlineKeyboardButton("➕ Add New Pattern", callback_data="email_filters_add")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_settings")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    message = "📧 <b>Email Filters</b>\n\nManage your email notification filters:"
+
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def show_ignored_emails_from_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show ignored email patterns from the menu."""
+    query = update.callback_query
+    if not query or not query.from_user:
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(query.from_user.id)
+    if not user:
+        await query.edit_message_text(
+            "❌ User not found. Please use /start to register."
+        )
+        return
+
+    ignored = (
+        cast(
+            list[str] | None,
+            await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS),
+        )
+        or []
+    )
+
+    if not ignored:
+        message = (
+            "📧 <b>Email Ignore Patterns</b>\n\n"
+            "<b>No patterns currently ignored.</b>\n\n"
+            "Use the 'Add New Pattern' option to add patterns to ignore."
+        )
+    else:
+        message = (
+            "📧 <b>Email Ignore Patterns</b>\n\n"
+            f"<b>Currently ignoring {len(ignored)} pattern(s):</b>\n"
+        )
+        for i, pattern in enumerate(ignored, 1):
+            escaped_pattern = (
+                pattern.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            message += f"{i}. <code>{escaped_pattern}</code>\n"
+
+    keyboard = [
+        [InlineKeyboardButton("➕ Add New Pattern", callback_data="email_filters_add")],
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Email Filters", callback_data="settings_email_filters"
+            )
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def prompt_add_email_filter(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Prompt user to add an email filter pattern."""
+    query = update.callback_query
+    if not query:
+        return
+
+    message = (
+        "📧 <b>Add Email Filter Pattern</b>\n\n"
+        "Please send me the email pattern you want to ignore.\n\n"
+        "<b>Examples:</b>\n"
+        "• <code>noreply@example.com</code> - Ignore specific email\n"
+        "• <code>@spam.com</code> - Ignore entire domain\n"
+        "• <code>newsletter</code> - Ignore emails containing 'newsletter'\n\n"
+        "Send your pattern as a regular message, or use /cancel to abort."
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("❌ Cancel", callback_data="settings_email_filters")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+    # Store state for handling the next message
+    user_data = cast(dict[str, Any], context.user_data)
+    user_data["awaiting_email_pattern"] = True
+
+
+async def handle_setting_modification(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle modification of a specific setting."""
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    setting_key_str = query.data.replace("modify_", "")
+    try:
+        setting_key = SettingKey(setting_key_str)
+    except ValueError:
+        await query.edit_message_text("❌ Invalid setting key.")
+        return
+
+    # Get the human-readable label for this setting
+    label = None
+    for human_label, key in SETTINGS_LABEL_MAP.items():
+        if key == setting_key:
+            label = human_label
+            break
+
+    if not label:
+        label = setting_key.value.replace("_", " ").title()
+
+    description = SETTINGS_DESCRIPTIONS.get(setting_key, "")
+
+    message = (
+        f"✏️ <b>Modify: {label}</b>\n\n"
+        f"<b>Description:</b> {description}\n\n"
+        "Please send me the new value as a regular message, or use /cancel to abort."
+    )
+
+    # Add specific instructions for certain settings
+    if setting_key == SettingKey.GREET:
+        message += (
+            "\n<b>Options:</b>\n"
+            "• <code>first_name</code> - Use your first name\n"
+            "• <code>username</code> - Use your username\n"
+            "• Any custom text you prefer"
+        )
+    elif setting_key == SettingKey.BRIEFING_TIME:
+        message += (
+            "\n<b>Format:</b> HH:MM (24-hour format)\n"
+            "<b>Example:</b> <code>08:30</code> for 8:30 AM"
+        )
+
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="back_to_settings")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+    # Store state for handling the next message
+    user_data = cast(dict[str, Any], context.user_data)
+    user_data["awaiting_setting_value"] = setting_key
+    user_data["setting_label"] = label
+
+
+async def show_settings_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show the main settings menu."""
+    query = update.callback_query
+    if not query:
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📋 Show Current Settings", callback_data="settings_show"
+            )
+        ],
+        [InlineKeyboardButton("✏️ Modify Settings", callback_data="settings_modify")],
+        [
+            InlineKeyboardButton(
+                "🔐 Google Authentication", callback_data="settings_google_auth"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📧 Email Filters", callback_data="settings_email_filters"
+            )
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    settings_message = (
+        "⚙️ <b>Settings Menu</b>\n\n"
+        "Choose an option below to view or modify your settings:"
+    )
+
+    await query.edit_message_text(
+        settings_message, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
+
+
+async def handle_settings_input(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle user input for settings modification.
+
+    Args:
+        update: The update object from Telegram.
+        context: The context object from Telegram.
+    """
+    if not update.message or not update.effective_user:
+        return
+
+    user_data = cast(dict[str, Any], context.user_data)
+
+    # Check if user is providing a setting value
+    if "awaiting_setting_value" in user_data:
+        await process_setting_value(update, context)
+        return
+
+    # Check if user is providing an email pattern
+    if user_data.get("awaiting_email_pattern"):
+        await process_email_pattern(update, context)
+        return
+
+
+async def process_setting_value(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Process a new setting value from the user."""
+    if not update.message or not update.effective_user:
+        return
+
+    user_data = cast(dict[str, Any], context.user_data)
+    setting_key = user_data.get("awaiting_setting_value")
+    setting_label = user_data.get("setting_label", "Setting")
+
+    if not isinstance(setting_key, SettingKey):
+        return
+
+    if not update.message.text:
+        await update.message.reply_text(
+            "❌ Please provide a valid value or use /cancel to abort."
+        )
+        return
+
+    value = update.message.text.strip()
+    if not value:
+        await update.message.reply_text(
+            "❌ Please provide a valid value or use /cancel to abort."
+        )
+        return
+
+    # Validate specific settings
+    if setting_key == SettingKey.BRIEFING_TIME:
+        import re
+
+        if not re.match(r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$", value):
+            await update.message.reply_text(
+                "❌ Invalid time format. Please use HH:MM format (e.g., 08:30)."
+            )
+            return
+
+    # Save the setting
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ User not found. Please use /start to register."
+        )
+        return
+
+    # Handle special case for greet setting
+    if setting_key == SettingKey.GREET and not value:
+        value = "first_name"
+
+    await user_service.set_setting(user.id, setting_key, value)
+
+    # Clear the awaiting state
+    user_data.pop("awaiting_setting_value", None)
+    user_data.pop("setting_label", None)
+
+    # Send confirmation with menu to go back
+    keyboard = [
+        [InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"✅ <b>{setting_label}</b> updated to: <code>{value}</code>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=reply_markup,
+    )
+
+    logger.info(f"Updated {setting_key.value} to '{value}' for user {user.id}")
+
+
+async def process_email_pattern(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Process a new email pattern from the user."""
+    if not update.message or not update.effective_user:
+        return
+
+    user_data = cast(dict[str, Any], context.user_data)
+    if not update.message.text:
+        await update.message.reply_text(
+            "❌ Please provide a valid email pattern or use /cancel to abort."
+        )
+        return
+
+    pattern = update.message.text.strip()
+
+    if not pattern:
+        await update.message.reply_text(
+            "❌ Please provide a valid email pattern or use /cancel to abort."
+        )
+        return
+
+    user_service = get_user_service()
+    user = await user_service.get_user_by_telegram_chat_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ User not found. Please use /start to register."
+        )
+        return
+
+    ignored = (
+        cast(
+            list[str] | None,
+            await user_service.get_setting(user.id, SettingKey.IGNORE_EMAILS),
+        )
+        or []
+    )
+
+    if pattern in ignored:
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to Email Filters", callback_data="settings_email_filters"
+                )
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"📧 Pattern <code>{pattern}</code> is already in your ignore list.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=reply_markup,
+        )
+        user_data.pop("awaiting_email_pattern", None)
+        return
+
+    ignored.append(pattern)
+    await user_service.set_setting(user.id, SettingKey.IGNORE_EMAILS, ignored)
+
+    # Clear the awaiting state
+    user_data.pop("awaiting_email_pattern", None)
+
+    # Send confirmation with menu to go back
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Email Filters", callback_data="settings_email_filters"
+            )
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"✅ Added <code>{pattern}</code> to your email ignore list.\n\n"
+        f"Emails matching this pattern will no longer trigger notifications.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=reply_markup,
+    )
+
+    logger.info(f"Added email pattern '{pattern}' for user {user.id}")
+
+
+async def handle_cancel_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle the /cancel command for menu-based operations.
+
+    Args:
+        update: The update object from Telegram.
+        context: The context object from Telegram.
+    """
+    if not update.message or not update.effective_user:
+        return
+
+    user_data = cast(dict[str, Any], context.user_data)
+
+    # Clear any awaiting states
+    was_awaiting = user_data.pop("awaiting_setting_value", None) or user_data.pop(
+        "awaiting_email_pattern", None
+    )
+    user_data.pop("setting_label", None)
+
+    if was_awaiting:
+        # Show settings menu if user was in the middle of an operation
+        keyboard = [
+            [InlineKeyboardButton("⚙️ Settings Menu", callback_data="back_to_settings")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            "❌ Operation cancelled.", reply_markup=reply_markup
+        )
+        logger.info(f"Cancelled settings operation for user {update.effective_user.id}")
+    else:
+        await update.message.reply_text("Nothing to cancel.")

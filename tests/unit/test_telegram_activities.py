@@ -56,7 +56,7 @@ class TestTelegramActivities:
         assert result is True
         mock_telegram_client_class.assert_called_once_with(user_id=1)
         mock_telegram_client.send_message.assert_called_once_with(
-            text="Test message", parse_mode="Markdown"
+            text="Test message", parse_mode="HTML"
         )
 
     @patch("the_assistant.activities.telegram_activities.send_message")

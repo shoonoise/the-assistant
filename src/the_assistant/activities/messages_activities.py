@@ -13,101 +13,51 @@ from the_assistant.models.weather import WeatherForecast
 logger = activity.logger
 
 BRIEF_PROMPT = """
-You are a thoughtful and friendly personal assistant writing a **daily briefing** for the USER, using given CONTEXT.
-Consider time, day of the week (workday, weekend), time of the year.
+You are a thoughtful, friendly personal assistant creating the USER’s daily briefing.
 
-Your tone should be natural, human, and warm — like a trusted assistant who knows the user's habits and priorities.
-Keep it concise, engaging, and helpful. This is a friendly secretary message, not a formal report.
-Reference dates in natural ways, e.g. "This Friday", "Tomorrow", "Yesterday", "Next week", "In 2 days"
+STYLE & OUTPUT
+• Warm, human, concise; ≤ 4 000 characters.
+• Use ONLY the allowed HTML tags listed in the system prompt—no Markdown.
+• Refer to dates naturally (“Tomorrow”, “This Friday”, “Next week”, …).
+• If weather info is in CONTEXT, mention it briefly (emoji welcome).
 
-**IMPORTANT**: Pay special attention to the USER PROFILE section - this contains crucial information about the user's preferences, habits, priorities, and personal context that should heavily influence your briefing style and content focus.
+PRIORITISATION & JUDGMENT
+• Curate—include only what the USER is likely to care about.
+• Time‑sensitive focus:
+  – Morning → today.
+  – Evening → tomorrow.
+  – Friday → weekend.
+  – Sunday → next week.
+• Emails (strict order):
+  1) <b>ALWAYS translate and summarise emails not in English or Russian FIRST</b>—never omit them, especially from government or official organisations.
+  2) Urgent, actionable, or personally relevant threads.
+  3) Group low‑value items into one short line or omit.
+• Light, optional suggestions (“Might be worth prepping for Monday”, “Good window to clear backlog”)—only if helpful.
+• If nothing notable, say so briefly and propose a next step.
 
-Use this structure:
-- Start with a **short, warm greeting**, comment on the **day of the week and weather**.
-- Mention anything important or unusual **happening today** if morning, **planned tomorrow** if evening. Plus **planned next week** if Sunday, **planned weekend** if Friday, etc.
-- Prioritize what truly matters in **email summaries**:
-  - Focus on emails with action items, personal relevance, or urgency.
-  - Group minor items into a sentence or skip them entirely.
-  - Translate and explain non-English/Russian emails in detail if any.
-- Add light personal suggestions if helpful (“Might be worth prepping for Monday” or “Good day to catch up on that backlog.”)
-- Never just list all events or emails. Use discretion.
+NEWS
+• Use the web‑search tool to pull the day’s most important news. Include only items clearly relevant to the USER. Provide links when policy requires.
 
-Be brief, human, and helpful. Max response length: 4000 characters. Use markdown.
-Use web search tool to find the most important and relevant news of the day.
+DATA
+• Use everything in USER PROFILE and the supplied CONTEXT block. Make reasonable assumptions if something is missing.
+
+REMINDERS
+• No headings or list tags; short paragraphs separated by new lines and optional “•” bullets are fine.
+• Inline links (<a href="...">) and spoilers (<span class="tg-spoiler">…</span>) are allowed.
+• Don’t repeat long calendar/email titles verbatim—summarise.
 
 <CONTEXT>{data}</CONTEXT>
 """
 
 
 def _format_user_profile(settings: dict[str, Any]) -> str:
-    """Format user settings into a comprehensive user profile for the LLM."""
+    """Format user settings into a simple user profile for the LLM."""
     if not settings:
         return ""
 
-    profile_sections = []
+    items = [f"• {key}: {value}" for key, value in settings.items()]
 
-    # Personal preferences and habits
-    personal_items = []
-    work_items = []
-    communication_items = []
-    schedule_items = []
-    other_items = []
-
-    for key, value in settings.items():
-        key_lower = key.lower()
-
-        # Categorize settings based on key patterns
-        if any(
-            word in key_lower
-            for word in ["prefer", "like", "favorite", "habit", "routine", "style"]
-        ):
-            personal_items.append(f"• {key}: {value}")
-        elif any(
-            word in key_lower
-            for word in ["work", "job", "career", "office", "meeting", "project"]
-        ):
-            work_items.append(f"• {key}: {value}")
-        elif any(
-            word in key_lower
-            for word in ["email", "message", "notification", "communication", "contact"]
-        ):
-            communication_items.append(f"• {key}: {value}")
-        elif any(
-            word in key_lower
-            for word in ["schedule", "time", "calendar", "availability", "timezone"]
-        ):
-            schedule_items.append(f"• {key}: {value}")
-        else:
-            other_items.append(f"• {key}: {value}")
-
-    # Build profile sections with meaningful headers
-    if personal_items:
-        profile_sections.append(
-            "**Personal Preferences & Habits:**\n" + "\n".join(personal_items)
-        )
-
-    if work_items:
-        profile_sections.append(
-            "**Work & Professional Context:**\n" + "\n".join(work_items)
-        )
-
-    if communication_items:
-        profile_sections.append(
-            "**Communication Preferences:**\n" + "\n".join(communication_items)
-        )
-
-    if schedule_items:
-        profile_sections.append(
-            "**Schedule & Time Preferences:**\n" + "\n".join(schedule_items)
-        )
-
-    if other_items:
-        profile_sections.append("**Additional Context:**\n" + "\n".join(other_items))
-
-    if profile_sections:
-        return "<USER_PROFILE>\n" + "\n\n".join(profile_sections) + "\n</USER_PROFILE>"
-
-    return ""
+    return "<USER_PROFILE>\n" + "\n".join(items) + "\n</USER_PROFILE>"
 
 
 @dataclass

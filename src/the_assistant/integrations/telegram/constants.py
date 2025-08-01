@@ -27,3 +27,11 @@ SETTINGS_LABEL_MAP: dict[str, SettingKey] = {
     "Location": SettingKey.LOCATION,
     "Ignored email senders": SettingKey.IGNORE_EMAILS,
 }
+
+SETTINGS_DESCRIPTIONS: dict[SettingKey, str] = {
+    SettingKey.GREET: "How the bot should address you (first_name, username, or custom)",
+    SettingKey.BRIEFING_TIME: "Preferred time for daily briefings (e.g., 08:00)",
+    SettingKey.ABOUT_ME: "Personal information to help customize responses",
+    SettingKey.LOCATION: "Your location for weather and local information",
+    SettingKey.IGNORE_EMAILS: "Email patterns to ignore in notifications",
+}

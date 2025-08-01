@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class SendMessageInput:
     user_id: int
     text: str
-    parse_mode: str = "Markdown"
+    parse_mode: str = "HTML"
 
 
 @dataclass
@@ -27,7 +27,7 @@ class SendFormattedMessageInput:
     user_id: int
     title: str
     content: str
-    parse_mode: str = "Markdown"
+    parse_mode: str = "HTML"
 
 
 @activity.defn
@@ -77,10 +77,10 @@ async def send_formatted_message(
     logger.info(f"Sending formatted message for user {input.user_id}: {input.title}")
 
     # Format the message with title and content
-    if input.parse_mode == "Markdown":
-        formatted_text = f"**{input.title}**\n\n{input.content}"
-    elif input.parse_mode == "HTML":
+    if input.parse_mode == "HTML":
         formatted_text = f"<b>{input.title}</b>\n\n{input.content}"
+    elif input.parse_mode == "Markdown":
+        formatted_text = f"**{input.title}**\n\n{input.content}"
     else:
         formatted_text = f"{input.title}\n\n{input.content}"
 
