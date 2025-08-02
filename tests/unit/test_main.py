@@ -32,37 +32,38 @@ class TestMainApp:
     def test_oauth_redirect_with_all_params(self, client):
         """Test OAuth redirect with all parameters."""
         response = client.get(
-            "/oauth2callback?state=test_state&code=test_code&error=test_error"
+            "/google/oauth2callback?state=test_state&code=test_code&error=test_error",
+            follow_redirects=False,
         )
 
         # The actual behavior depends on the OAuth router implementation
         # Since error is present, it will redirect to auth-error
-        assert response.status_code == 200  # The router handles this internally
+        assert response.status_code == 302  # The router redirects to auth-error
 
     def test_oauth_redirect_with_state_only(self, client):
         """Test OAuth redirect with state parameter only."""
-        response = client.get("/oauth2callback?state=test_state")
+        response = client.get("/google/oauth2callback?state=test_state")
 
         # Without code, this will be processed by the OAuth router
         assert response.status_code in [200, 302, 422]  # Various possible responses
 
     def test_oauth_redirect_with_code_only(self, client):
         """Test OAuth redirect with code parameter only."""
-        response = client.get("/oauth2callback?code=test_code")
+        response = client.get("/google/oauth2callback?code=test_code")
 
         # Without state, this will be processed by the OAuth router
         assert response.status_code in [200, 302, 422]  # Various possible responses
 
     def test_oauth_redirect_with_error_only(self, client):
         """Test OAuth redirect with error parameter only."""
-        response = client.get("/oauth2callback?error=access_denied")
+        response = client.get("/google/oauth2callback?error=access_denied")
 
         # Error will be processed by the OAuth router
         assert response.status_code in [200, 302, 422]  # Various possible responses
 
     def test_oauth_redirect_no_params(self, client):
         """Test OAuth redirect with no parameters."""
-        response = client.get("/oauth2callback")
+        response = client.get("/google/oauth2callback")
 
         # No params will be processed by the OAuth router
         assert response.status_code in [200, 302, 422]  # Various possible responses
@@ -94,6 +95,6 @@ class TestMainApp:
         routes = [route.path for route in app.routes]
 
         # Check for our custom routes
-        assert "/oauth2callback" in routes
+        assert "/google/oauth2callback" in routes
         assert "/auth-success" in routes
         assert "/auth-error" in routes
